@@ -1,0 +1,15 @@
+{
+  "name": "feishu-plugin-platform-publisher",
+  "private": true,
+  "type": "module",
+  "description": "RPA publisher — 用 Playwright + 持久化登录态驱动飞书开发者后台跑无 OpenAPI 的步骤(建应用 / 登记扩展取 blockTypeID / 建版本申请发布)。",
+  "scripts": {
+    "login": "node src/cli.mjs login",
+    "create-app": "node src/cli.mjs create-app",
+    "register-ext": "node src/cli.mjs register-ext",
+    "publish": "node src/cli.mjs publish"
+  },
+  "dependencies": {
+    "playwright": "^1.49.0"
+  }
+}

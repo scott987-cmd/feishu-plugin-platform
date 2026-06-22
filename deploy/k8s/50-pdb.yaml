@@ -1,0 +1,21 @@
+# Keep at least one replica of each service serving during voluntary disruptions
+# (node drain / upgrade), so routine maintenance doesn't take the platform down.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api
+  namespace: feishu-plugin-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: { app: api }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: generator
+  namespace: feishu-plugin-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: { app: generator }

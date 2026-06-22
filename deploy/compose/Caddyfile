@@ -1,0 +1,8 @@
+# Caddy 反向代理:对 {$DOMAIN} 自动申请并续期 Let's Encrypt 证书,
+# 把 443 流量转发给内网的 api:8080。/healthz、/api/* 全走这里。
+{$DOMAIN} {
+	encode gzip
+	reverse_proxy api:8080 {
+		health_uri /healthz
+	}
+}

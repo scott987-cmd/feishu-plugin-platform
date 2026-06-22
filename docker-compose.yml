@@ -1,0 +1,45 @@
+# Phase 0–1 deployment: docker-compose (single node). The backend is written to
+# be k8s-orchestratable from day 1 (12-factor, stateless, config via env), so the
+# move to k3s/k8s later is a switch, not a rewrite. See deploy/k8s/.
+name: feishu-plugin-platform
+
+services:
+  generator:
+    build:
+      context: .
+      dockerfile: Dockerfile.generator
+    environment:
+      PORT: "8090"
+      # AI track defaults to DeepSeek (OpenAI-compatible, domestic).
+      DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY:-}"
+      MODEL: "${MODEL:-deepseek-chat}"
+      LLM_PROVIDER: "${LLM_PROVIDER:-deepseek}"
+      # Claude is opt-in: set LLM_PROVIDER=anthropic + ANTHROPIC_API_KEY.
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+    expose:
+      - "8090"
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      PORT: "8080"
+      GENERATOR_URL: "http://generator:8090"
+      WEB_DIR: "/web"
+      # STORE=memory (default) | bitable. For bitable, also set the FEISHU_* vars.
+      STORE: "${STORE:-memory}"
+      FEISHU_APP_ID: "${FEISHU_APP_ID:-}"
+      FEISHU_APP_SECRET: "${FEISHU_APP_SECRET:-}"
+      FEISHU_BITABLE_APP_TOKEN: "${FEISHU_BITABLE_APP_TOKEN:-}"
+      FEISHU_BITABLE_TABLE_ID: "${FEISHU_BITABLE_TABLE_ID:-}"
+      # Production: set a bearer token + a specific CORS origin + a generate cap.
+      PLATFORM_API_TOKEN: "${PLATFORM_API_TOKEN:-}"
+      ALLOWED_ORIGIN: "${ALLOWED_ORIGIN:-*}"
+      GENERATE_RPM: "${GENERATE_RPM:-60}"
+    ports:
+      - "8080:8080"
+    depends_on:
+      - generator
+    restart: unless-stopped

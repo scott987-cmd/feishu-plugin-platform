@@ -1,0 +1,221 @@
+package generator
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"time"
+
+	"github.com/dushibing/feishu-plugin-platform/internal/shortcut"
+)
+
+// NL → field-shortcut generation. Reuses the OpenAI-compatible chat plumbing
+// (oaRequest/chatAPI/httpDeepSeek) from deepseek.go: the model is forced to call
+// one function whose JSON-schema parameters ARE the field-shortcut DSL schema —
+// so it can only emit a structured, validatable definition, never code. The
+// emitted DSL is then compiled to an auditable basekit TS project elsewhere.
+
+const (
+	emitShortcutTool      = "emit_field_shortcut"
+	shortcutMaxRepairs    = 2
+	shortcutSystemPrompt  = "You generate a Feishu Bitable FIELD SHORTCUT definition (basekit), as JSON. " +
+		"You MUST call the " + emitShortcutTool + " tool exactly once, using only fields and enum values allowed by its input schema. " +
+		"A field shortcut: takes input field(s) the user picks (formItems, normally component=FieldSelect with supportType), " +
+		"calls ONE external HTTP API (execute.url + method), and writes back one or more output columns (result.properties). " +
+		"RULES: (1) `domains` MUST list every external host the request hits (e.g. api.exchangerate-api.com); execute.url's host MUST be one of them. " +
+		"(2) `result.kind` is \"object\"; each property has key (ascii), type, an optional 3-locale label, and `expr` (its value). " +
+		"(3) `expr` uses ONLY this grammar — no other code: atoms = a number, rand(), in.<formItemKey>, or res.<dotted.json.path>; operators + - * / ( ). " +
+		"Examples: `in.account * res.rates.USD` , `res.data.title` , `rand()`. " +
+		"(4) Include one hidden Text property with isGroupByKey via groupByKey=true and expr `rand()` as a stable row id. " +
+		"(5) execute.url may contain {formItemKey} placeholders. For a POST API, set method=POST and execute.body (JSON sent as application/json); a body value of exactly \"{formKey}\" injects that input, anything else is a literal. " +
+		"(6) If the API needs a key/token, add `auth` (the END-USER enters it — never hardcode, never put the token in execute.url): " +
+		"choose the type: QueryParamToken with paramName (e.g. appid) when the key goes in the URL query; HeaderBearerToken for an Authorization: Bearer header; CustomHeaderToken with paramName set to the header name (e.g. X-API-Key); Basic for username+password. Omit auth for open APIs. " +
+		"Reuse names implied by the user's request; pick sensible field types and number formatters. id is a lowercase ascii slug like exchange-rate."
+)
+
+// fieldShortcutSchema is the JSON schema the model must satisfy. Built from the
+// shortcut package's enums so it auto-syncs with the validator.
+func fieldShortcutSchema() map[string]any {
+	str := map[string]any{"type": "string"}
+	boolean := map[string]any{"type": "boolean"}
+	enum := func(vals []string) map[string]any { return map[string]any{"type": "string", "enum": vals} }
+	arr := func(items map[string]any) map[string]any { return map[string]any{"type": "array", "items": items} }
+	d := func(base map[string]any, desc string) map[string]any {
+		out := map[string]any{"description": desc}
+		for k, v := range base {
+			out[k] = v
+		}
+		return out
+	}
+
+	i18nObj := map[string]any{
+		"type":     "object",
+		"required": []string{"zh_CN"},
+		"properties": map[string]any{
+			"zh_CN": d(str, "Chinese label"),
+			"en_US": d(str, "English label (optional)"),
+			"ja_JP": d(str, "Japanese label (optional)"),
+		},
+	}
+	formItem := map[string]any{
+		"type":     "object",
+		"required": []string{"key", "label", "component"},
+		"properties": map[string]any{
+			"key":         d(str, "stable ascii identifier, e.g. account"),
+			"label":       i18nObj,
+			"component":   d(enum(shortcut.ValidComponents), "FieldSelect lets the user pick a host column"),
+			"supportType": d(arr(enum(shortcut.ValidFieldTypes)), "for FieldSelect: which host field types may be picked"),
+			"required":    boolean,
+		},
+	}
+	resultProp := map[string]any{
+		"type":     "object",
+		"required": []string{"key", "type", "expr"},
+		"properties": map[string]any{
+			"key":        d(str, "ascii output column key"),
+			"type":       enum(shortcut.ValidFieldTypes),
+			"label":      i18nObj,
+			"primary":    d(boolean, "the headline value shown in the cell"),
+			"hidden":     boolean,
+			"groupByKey": d(boolean, "set true on a hidden Text id column whose expr is rand()"),
+			"formatter":  d(enum(shortcut.ValidFormatters), "optional number formatter"),
+			"expr":       d(str, "value expression: number | rand() | in.<formKey> | res.<json.path>, with + - * / ( )"),
+		},
+	}
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"id", "title", "domains", "formItems", "result", "execute"},
+		"properties": map[string]any{
+			"id":        d(str, "lowercase ascii slug, e.g. exchange-rate"),
+			"title":     i18nObj,
+			"domains":   d(arr(str), "every external host the request hits, e.g. api.exchangerate-api.com"),
+			"auth": map[string]any{
+				"type":        "object",
+				"description": "optional; include ONLY if the API needs a key/token (omit for open APIs)",
+				"required":    []string{"id", "type", "label", "platform", "instructionsUrl"},
+				"properties": map[string]any{
+					"id":              d(str, "ascii id referenced by the request, e.g. apiToken"),
+					"type":            d(enum(shortcut.ValidAuthTypes), "QueryParamToken (key in URL query) or HeaderBearerToken (Authorization: Bearer header)"),
+					"label":           d(str, "what the user enters, e.g. OpenWeatherMap API Key"),
+					"platform":        d(str, "platform name, e.g. OpenWeatherMap"),
+					"instructionsUrl": d(str, "URL where the user learns how to get the credential"),
+					"paramName":       d(str, "QueryParamToken only: the query parameter name, e.g. appid"),
+				},
+			},
+			"formItems": arr(formItem),
+			"result": map[string]any{
+				"type":     "object",
+				"required": []string{"kind", "properties"},
+				"properties": map[string]any{
+					"kind":       enum(shortcut.ValidResultKinds),
+					"properties": arr(resultProp),
+				},
+			},
+			"execute": map[string]any{
+				"type":     "object",
+				"required": []string{"url", "method"},
+				"properties": map[string]any{
+					"url":    d(str, "external API URL; host MUST be in domains; may contain {formKey} placeholders"),
+					"method": enum(shortcut.ValidMethods),
+					"body": map[string]any{
+						"type":                 "object",
+						"description":          "POST only: JSON body, field→value. A value of exactly \"{formKey}\" injects that input; anything else is a literal string.",
+						"additionalProperties": map[string]any{"type": "string"},
+					},
+				},
+			},
+		},
+	}
+}
+
+// GenerateShortcut turns a natural-language request into a validated
+// FieldShortcut via DeepSeek. Returns ok=false when DEEPSEEK_API_KEY is absent
+// or the call fails (caller can decide how to handle — there is no deterministic
+// fallback for arbitrary shortcuts).
+func GenerateShortcut(prompt string) (shortcut.FieldShortcut, bool, error) {
+	key := os.Getenv("DEEPSEEK_API_KEY")
+	if key == "" {
+		return shortcut.FieldShortcut{}, false, nil
+	}
+	model := os.Getenv("MODEL")
+	if model == "" {
+		model = deepseekDefaultModel
+	}
+	base := os.Getenv("DEEPSEEK_BASE_URL")
+	if base == "" {
+		base = deepseekDefaultBase
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+	client := &http.Client{Timeout: 45 * time.Second, Transport: &http.Transport{Proxy: nil}}
+	f, err := generateShortcutViaChat(ctx, httpDeepSeek{apiKey: key, baseURL: base, http: client}, model, prompt)
+	if err != nil {
+		log.Printf("deepseek shortcut generation failed: %v", err)
+		return shortcut.FieldShortcut{}, false, err
+	}
+	return f, true, nil
+}
+
+// generateShortcutViaChat is the forced-call + validate + auto-repair loop for
+// field shortcuts. Pure logic — unit-tested with a fake chatAPI.
+func generateShortcutViaChat(ctx context.Context, api chatAPI, model, prompt string) (shortcut.FieldShortcut, error) {
+	tools := []oaTool{{
+		Type: "function",
+		Function: oaFunctionDef{
+			Name:        emitShortcutTool,
+			Description: "Emit the Feishu Bitable field-shortcut definition for the user's request.",
+			Parameters:  fieldShortcutSchema(),
+		},
+	}}
+	messages := []oaMessage{
+		{Role: "system", Content: shortcutSystemPrompt},
+		{Role: "user", Content: prompt},
+	}
+
+	for round := 0; round <= shortcutMaxRepairs; round++ {
+		resp, err := api.create(ctx, oaRequest{
+			Model:      model,
+			Messages:   messages,
+			Tools:      tools,
+			ToolChoice: map[string]any{"type": "function", "function": map[string]any{"name": emitShortcutTool}},
+			MaxTokens:  1500,
+		})
+		if err != nil {
+			return shortcut.FieldShortcut{}, err
+		}
+		if len(resp.Choices) == 0 {
+			return shortcut.FieldShortcut{}, fmt.Errorf("deepseek returned no choices")
+		}
+		msg := resp.Choices[0].Message
+		var call *oaToolCall
+		for i := range msg.ToolCalls {
+			if msg.ToolCalls[i].Function.Name == emitShortcutTool {
+				call = &msg.ToolCalls[i]
+			}
+		}
+		if call == nil {
+			return shortcut.FieldShortcut{}, fmt.Errorf("model did not call %s", emitShortcutTool)
+		}
+
+		var f shortcut.FieldShortcut
+		decodeErr := json.Unmarshal([]byte(call.Function.Arguments), &f)
+		var problem string
+		if decodeErr != nil {
+			problem = "tool arguments were not valid FieldShortcut JSON: " + decodeErr.Error()
+		} else if verr := f.Validate(); verr != nil {
+			problem = "validation failed: " + verr.Error()
+		} else {
+			return f, nil // success
+		}
+
+		messages = append(messages, msg, oaMessage{
+			Role:       "tool",
+			ToolCallID: call.ID,
+			Content:    problem + ". Fix it and call " + emitShortcutTool + " again.",
+		})
+	}
+	return shortcut.FieldShortcut{}, fmt.Errorf("exhausted %d repair rounds without a valid field shortcut", shortcutMaxRepairs)
+}

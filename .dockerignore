@@ -1,0 +1,7 @@
+.git
+.claude
+.DS_Store
+deploy
+*.md
+方案.md
+/tmp

@@ -1,0 +1,5 @@
+# 登录态 = 凭证等价物,绝不提交
+state.json
+*.state.json
+screenshots/
+node_modules/

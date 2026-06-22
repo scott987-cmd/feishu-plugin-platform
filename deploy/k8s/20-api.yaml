@@ -1,0 +1,80 @@
+# API / BFF service: app-definition CRUD, generation proxy, mock renderer.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: feishu-plugin-platform
+  labels: { app: api }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: api }
+  template:
+    metadata:
+      labels: { app: api }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: api
+          image: feishu-plugin-platform/api:0.1.0
+          # For prod, pin by digest (image: ...@sha256:<digest>) for supply-chain integrity.
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 65532 # distroless nonroot uid
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: GENERATOR_URL
+              valueFrom: { configMapKeyRef: { name: platform-config, key: GENERATOR_URL } }
+            - name: WEB_DIR
+              valueFrom: { configMapKeyRef: { name: platform-config, key: WEB_DIR } }
+            - name: SERVE_WEB
+              valueFrom: { configMapKeyRef: { name: platform-config, key: SERVE_WEB } }
+            - name: STORE
+              valueFrom: { configMapKeyRef: { name: platform-config, key: STORE } }
+            - name: FEISHU_BITABLE_APP_TOKEN
+              valueFrom: { configMapKeyRef: { name: platform-config, key: FEISHU_BITABLE_APP_TOKEN } }
+            - name: FEISHU_BITABLE_TABLE_ID
+              valueFrom: { configMapKeyRef: { name: platform-config, key: FEISHU_BITABLE_TABLE_ID } }
+            - name: FEISHU_APP_ID
+              valueFrom: { secretKeyRef: { name: platform-secrets, key: FEISHU_APP_ID } }
+            - name: FEISHU_APP_SECRET
+              valueFrom: { secretKeyRef: { name: platform-secrets, key: FEISHU_APP_SECRET } }
+            - name: ALLOWED_ORIGIN
+              valueFrom: { configMapKeyRef: { name: platform-config, key: ALLOWED_ORIGIN } }
+            - name: GENERATE_RPM
+              valueFrom: { configMapKeyRef: { name: platform-config, key: GENERATE_RPM } }
+            - name: PLATFORM_API_TOKEN
+              valueFrom: { secretKeyRef: { name: platform-secrets, key: PLATFORM_API_TOKEN } }
+          readinessProbe:
+            httpGet: { path: /readyz, port: 8080 }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          resources:
+            requests: { cpu: "100m", memory: "128Mi" }
+            limits: { cpu: "500m", memory: "256Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: feishu-plugin-platform
+spec:
+  selector: { app: api }
+  ports:
+    - port: 80
+      targetPort: 8080

@@ -1,0 +1,54 @@
+# Namespace, non-secret config, and an EXAMPLE secret. Replace the secret values
+# (do not commit real keys — use a sealed-secret / external-secrets in prod).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: feishu-plugin-platform
+  labels:
+    # Enforce the 'restricted' Pod Security Standard cluster-side. Requires the
+    # container securityContext in 10-/20-*.yaml (already set).
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: platform-config
+  namespace: feishu-plugin-platform
+data:
+  GENERATOR_URL: "http://generator:8090"
+  # AI track: DeepSeek (OpenAI-compatible) by default. For Claude set
+  # LLM_PROVIDER=anthropic + the ANTHROPIC_API_KEY secret + MODEL=claude-*.
+  LLM_PROVIDER: "deepseek"
+  MODEL: "deepseek-chat"
+  WEB_DIR: "/web"
+  # Do not serve the dev mock renderer in production (reduces attack surface).
+  SERVE_WEB: "false"
+  # Production defaults to the persistent Bitable store. Fill the tokens below
+  # (create the table once via `go run ./cmd/bitable-bootstrap`).
+  STORE: "bitable"
+  FEISHU_BITABLE_APP_TOKEN: "REPLACE_ME"
+  FEISHU_BITABLE_TABLE_ID: "REPLACE_ME"
+  # Lock CORS to your Feishu origin in production (not "*").
+  ALLOWED_ORIGIN: "https://REPLACE.feishu.cn"
+  # Cap /api/generate per minute to protect the LLM budget.
+  GENERATE_RPM: "60"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: platform-secrets
+  namespace: feishu-plugin-platform
+type: Opaque
+stringData:
+  # --- replace these placeholders ---
+  # DEEPSEEK_API_KEY powers the default AI generation track. FEISHU_* are for the
+  # Bitable-backed store (STORE=bitable). ANTHROPIC_API_KEY only if you switch
+  # LLM_PROVIDER=anthropic. Until a workload reads a key, leave it out.
+  DEEPSEEK_API_KEY: "REPLACE_ME"
+  FEISHU_APP_ID: "REPLACE_ME"
+  FEISHU_APP_SECRET: "REPLACE_ME"
+  # Shared bearer token the container plugin sends as Authorization: Bearer <...>.
+  # Generate a strong random value (e.g. openssl rand -hex 32).
+  PLATFORM_API_TOKEN: "REPLACE_ME"

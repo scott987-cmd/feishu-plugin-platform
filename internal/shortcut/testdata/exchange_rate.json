@@ -1,0 +1,36 @@
+{
+  "id": "exchange-rate",
+  "title": { "zh_CN": "汇率换算", "en_US": "Exchange Rate", "ja_JP": "為替換算" },
+  "domains": ["api.exchangerate-api.com"],
+  "formItems": [
+    {
+      "key": "account",
+      "label": { "zh_CN": "人民币金额", "en_US": "RMB Amount", "ja_JP": "人民元の金額" },
+      "component": "FieldSelect",
+      "supportType": ["Number"],
+      "required": true
+    }
+  ],
+  "result": {
+    "kind": "object",
+    "properties": [
+      { "key": "id", "type": "Text", "groupByKey": true, "hidden": true, "expr": "rand()" },
+      {
+        "key": "usd",
+        "type": "Number",
+        "label": { "zh_CN": "美元金额", "en_US": "Dollar amount", "ja_JP": "ドル金額" },
+        "primary": true,
+        "formatter": "DIGITAL_ROUNDED_2",
+        "expr": "in.account * res.rates.USD"
+      },
+      {
+        "key": "rate",
+        "type": "Number",
+        "label": { "zh_CN": "汇率", "en_US": "Exchange Rate", "ja_JP": "為替レート" },
+        "formatter": "DIGITAL_ROUNDED_4",
+        "expr": "res.rates.USD"
+      }
+    ]
+  },
+  "execute": { "url": "https://api.exchangerate-api.com/v4/latest/CNY", "method": "GET" }
+}

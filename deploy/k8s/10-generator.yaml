@@ -1,0 +1,85 @@
+# Generator service: stateless LLM-orchestration workload. Scales horizontally
+# under bursty generation load via the HPA below.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: generator
+  namespace: feishu-plugin-platform
+  labels: { app: generator }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: generator }
+  template:
+    metadata:
+      labels: { app: generator }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: generator
+          image: feishu-plugin-platform/generator:0.1.0
+          # For prod, pin by digest (image: ...@sha256:<digest>) for supply-chain integrity.
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 65532 # distroless nonroot uid
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          ports:
+            - containerPort: 8090
+          env:
+            - name: PORT
+              value: "8090"
+            - name: LLM_PROVIDER
+              valueFrom: { configMapKeyRef: { name: platform-config, key: LLM_PROVIDER } }
+            - name: MODEL
+              valueFrom: { configMapKeyRef: { name: platform-config, key: MODEL } }
+            - name: DEEPSEEK_API_KEY
+              valueFrom: { secretKeyRef: { name: platform-secrets, key: DEEPSEEK_API_KEY } }
+          readinessProbe:
+            httpGet: { path: /readyz, port: 8090 }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8090 }
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          resources:
+            requests: { cpu: "100m", memory: "128Mi" }
+            limits: { cpu: "500m", memory: "256Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: generator
+  namespace: feishu-plugin-platform
+spec:
+  selector: { app: generator }
+  ports:
+    - port: 8090
+      targetPort: 8090
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: generator
+  namespace: feishu-plugin-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: generator
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

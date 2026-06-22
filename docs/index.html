@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>飞书多维表格插件生成平台 · Feishu Bitable Plugin Generator</title>
+<meta name="description" content="自然语言一句话 → 可审计的真实飞书 basekit 插件（TypeScript）。面向私有化部署飞书的企业，无需插件市场、无需开发团队。" />
+<style>
+  :root {
+    --brand: #0f6e56;
+    --brand-2: #15916f;
+    --brand-soft: #e6f3ef;
+    --brand-soft-2: #f1f8f6;
+    --ink: #14201c;
+    --ink-2: #3c4c47;
+    --ink-3: #6b7a75;
+    --line: #dde8e4;
+    --bg: #ffffff;
+    --bg-tint: #f6faf8;
+    --code-bg: #0d2c25;
+    --code-bg-2: #0a221c;
+    --code-ink: #d6efe7;
+    --code-key: #62d6ac;
+    --code-str: #a7e8c8;
+    --code-com: #5f8a7e;
+    --code-num: #ffd9a0;
+    --radius: 16px;
+    --radius-sm: 10px;
+    --shadow: 0 1px 2px rgba(15,110,86,.06), 0 8px 24px rgba(15,110,86,.07);
+    --shadow-lg: 0 12px 40px rgba(15,110,86,.12);
+    --maxw: 1080px;
+    --font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", system-ui, "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    --mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: var(--font);
+    color: var(--ink);
+    background: var(--bg);
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  a { color: var(--brand); text-decoration: none; }
+  a:hover { color: var(--brand-2); }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 13px; font-weight: 600; letter-spacing: .04em;
+    color: var(--brand); background: var(--brand-soft);
+    padding: 6px 14px; border-radius: 999px;
+    border: 1px solid var(--line);
+  }
+  .eyebrow .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--brand-2); }
+  h2.section-title {
+    font-size: clamp(24px, 3.4vw, 34px);
+    line-height: 1.25; margin: 14px 0 12px; letter-spacing: -.01em;
+  }
+  .section-lead { color: var(--ink-2); font-size: 17px; max-width: 720px; margin: 0 0 36px; }
+  section { padding: 76px 0; border-top: 1px solid var(--line); }
+  .en { font-family: var(--mono); font-size: .88em; color: var(--ink-3); font-weight: 500; }
+
+  /* ---------- Nav ---------- */
+  header.nav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(255,255,255,.82);
+    backdrop-filter: saturate(180%) blur(14px);
+    -webkit-backdrop-filter: saturate(180%) blur(14px);
+    border-bottom: 1px solid var(--line);
+  }
+  .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 62px; }
+  .brand { display: flex; align-items: center; gap: 11px; font-weight: 700; color: var(--ink); font-size: 16px; }
+  .brand .logo {
+    width: 30px; height: 30px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--brand-2), var(--brand));
+    display: grid; place-items: center; color: #fff; flex: none;
+  }
+  .nav-links { display: flex; align-items: center; gap: 26px; }
+  .nav-links a { color: var(--ink-2); font-size: 15px; font-weight: 500; }
+  .nav-links a:hover { color: var(--brand); }
+  .nav-cta {
+    background: var(--brand); color: #fff !important; padding: 8px 16px;
+    border-radius: 999px; font-size: 14px; font-weight: 600;
+  }
+  .nav-cta:hover { background: var(--brand-2); }
+  @media (max-width: 720px){ .nav-links a:not(.nav-cta){ display:none; } }
+
+  /* ---------- Hero ---------- */
+  .hero { position: relative; overflow: hidden; border-top: none; padding: 92px 0 84px; }
+  .hero::before {
+    content: ""; position: absolute; inset: 0; z-index: -1;
+    background:
+      radial-gradient(1100px 460px at 80% -8%, var(--brand-soft) 0%, rgba(230,243,239,0) 62%),
+      radial-gradient(820px 420px at 8% 6%, var(--brand-soft-2) 0%, rgba(241,248,246,0) 60%);
+  }
+  .hero h1 {
+    font-size: clamp(32px, 5.4vw, 56px);
+    line-height: 1.12; letter-spacing: -.02em; margin: 22px 0 18px; max-width: 14ch;
+  }
+  .hero h1 .accent {
+    background: linear-gradient(120deg, var(--brand), var(--brand-2));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero p.sub { font-size: clamp(17px, 2.2vw, 20px); color: var(--ink-2); max-width: 640px; margin: 0 0 30px; }
+  .hero-actions { display: flex; flex-wrap: wrap; gap: 14px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 13px 24px; border-radius: 999px; font-weight: 600; font-size: 16px;
+    border: 1px solid transparent; transition: transform .12s ease, box-shadow .12s ease, background .15s ease;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn-primary { background: var(--brand); color: #fff; box-shadow: var(--shadow); }
+  .btn-primary:hover { background: var(--brand-2); color: #fff; box-shadow: var(--shadow-lg); }
+  .btn-ghost { background: #fff; color: var(--brand); border-color: var(--line); }
+  .btn-ghost:hover { border-color: var(--brand-2); color: var(--brand-2); }
+  .hero-meta { display: flex; flex-wrap: wrap; gap: 20px 34px; margin-top: 40px; color: var(--ink-3); font-size: 14px; }
+  .hero-meta b { color: var(--ink); font-weight: 600; }
+  .hero-meta .pill {
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .hero-meta .pill svg { color: var(--brand-2); flex: none; }
+
+  /* ---------- Audience ---------- */
+  .audience-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .ac-card {
+    background: var(--bg-tint); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 26px 24px;
+  }
+  .ac-card .ic {
+    width: 42px; height: 42px; border-radius: 11px; background: var(--brand-soft);
+    color: var(--brand); display: grid; place-items: center; margin-bottom: 16px;
+  }
+  .ac-card h3 { margin: 0 0 8px; font-size: 18px; }
+  .ac-card p { margin: 0; color: var(--ink-2); font-size: 15px; }
+  @media (max-width: 820px){ .audience-grid { grid-template-columns: 1fr; } }
+
+  /* ---------- Generators ---------- */
+  .gen-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  .gen-card {
+    border: 1px solid var(--line); border-radius: var(--radius); background: #fff;
+    box-shadow: var(--shadow); overflow: hidden; display: flex; flex-direction: column;
+  }
+  .gen-head { padding: 26px 26px 20px; display: flex; align-items: flex-start; gap: 14px; }
+  .gen-head .ic {
+    width: 46px; height: 46px; border-radius: 12px; flex: none;
+    background: linear-gradient(135deg, var(--brand-2), var(--brand)); color: #fff;
+    display: grid; place-items: center;
+  }
+  .gen-head h3 { margin: 0; font-size: 20px; }
+  .gen-head .tag { font-family: var(--mono); font-size: 12.5px; color: var(--ink-3); }
+  .gen-body { padding: 0 26px 24px; }
+  .gen-body > p.desc { margin: 0 0 18px; color: var(--ink-2); font-size: 15px; }
+  .nl-example {
+    background: var(--brand-soft-2); border: 1px solid var(--line); border-left: 3px solid var(--brand-2);
+    border-radius: 10px; padding: 14px 16px; margin: 0 0 18px;
+  }
+  .nl-example .lbl { font-size: 12px; font-weight: 700; letter-spacing: .06em; color: var(--brand); text-transform: uppercase; }
+  .nl-example p { margin: 6px 0 0; font-size: 15px; color: var(--ink); }
+  .produces { margin: 0; padding: 0; list-style: none; display: grid; gap: 9px; }
+  .produces li { display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; color: var(--ink-2); }
+  .produces li svg { color: var(--brand-2); flex: none; margin-top: 3px; }
+  .gen-foot {
+    margin-top: auto; padding: 16px 26px; border-top: 1px solid var(--line);
+    background: var(--bg-tint); font-size: 13px; color: var(--ink-3); font-family: var(--mono);
+  }
+  @media (max-width: 820px){ .gen-grid { grid-template-columns: 1fr; } }
+
+  /* ---------- Flow steps ---------- */
+  .flow { background: var(--bg-tint); }
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; position: relative; }
+  .step { padding: 0 18px; position: relative; }
+  .step:not(:last-child)::after {
+    content: ""; position: absolute; top: 21px; right: -10px; width: 20px; height: 2px;
+    background: var(--line);
+  }
+  .step .num {
+    width: 44px; height: 44px; border-radius: 50%;
+    background: #fff; border: 2px solid var(--brand); color: var(--brand);
+    display: grid; place-items: center; font-weight: 700; font-size: 17px; margin-bottom: 16px;
+  }
+  .step h4 { margin: 0 0 6px; font-size: 17px; }
+  .step .code-bit { font-family: var(--mono); font-size: 12.5px; color: var(--brand); display: block; margin-bottom: 6px; }
+  .step p { margin: 0; color: var(--ink-2); font-size: 14px; }
+  @media (max-width: 860px){
+    .steps { grid-template-columns: 1fr 1fr; gap: 32px 18px; }
+    .step:not(:last-child)::after { display: none; }
+  }
+  @media (max-width: 480px){ .steps { grid-template-columns: 1fr; } }
+
+  /* ---------- Architecture ---------- */
+  .arch-figure {
+    border: 1px solid var(--line); border-radius: var(--radius); background: #fff;
+    box-shadow: var(--shadow); padding: 30px 18px; overflow-x: auto;
+  }
+  .arch-figure svg { display: block; margin: 0 auto; max-width: 100%; height: auto; min-width: 640px; }
+  .arch-legend { display: flex; flex-wrap: wrap; gap: 14px 26px; margin-top: 22px; font-size: 13.5px; color: var(--ink-2); }
+  .arch-legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .arch-legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+  /* ---------- Security ---------- */
+  .sec-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-bottom: 22px; }
+  .sec-card {
+    border: 1px solid var(--line); border-radius: var(--radius); padding: 24px 22px; background: #fff;
+    position: relative;
+  }
+  .sec-card .badge {
+    position: absolute; top: 22px; right: 22px; font-family: var(--mono);
+    font-size: 12px; color: var(--brand); font-weight: 600;
+  }
+  .sec-card .ic {
+    width: 42px; height: 42px; border-radius: 11px; background: var(--brand-soft);
+    color: var(--brand); display: grid; place-items: center; margin-bottom: 15px;
+  }
+  .sec-card h3 { margin: 0 0 8px; font-size: 17px; }
+  .sec-card p { margin: 0; color: var(--ink-2); font-size: 14.5px; }
+  .sec-card code { font-family: var(--mono); background: var(--brand-soft); color: var(--brand); padding: 1px 6px; border-radius: 5px; font-size: 12.5px; }
+  .sec-banner {
+    display: flex; align-items: center; gap: 16px;
+    background: var(--brand-soft-2); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 20px 24px;
+  }
+  .sec-banner .ic { width: 44px; height: 44px; flex: none; border-radius: 12px; background: var(--brand); color: #fff; display: grid; place-items: center; }
+  .sec-banner h3 { margin: 0 0 3px; font-size: 16px; }
+  .sec-banner p { margin: 0; color: var(--ink-2); font-size: 14.5px; }
+  @media (max-width: 820px){ .sec-grid { grid-template-columns: 1fr; } .sec-banner { flex-direction: column; align-items: flex-start; } }
+
+  /* ---------- Code showcase ---------- */
+  .code-show { display: grid; grid-template-columns: 0.9fr 1.4fr; gap: 26px; align-items: stretch; }
+  .code-intro .nl-input {
+    background: var(--brand-soft-2); border: 1px solid var(--line); border-left: 3px solid var(--brand-2);
+    border-radius: 12px; padding: 18px 18px;
+  }
+  .code-intro .nl-input .lbl { font-size: 12px; font-weight: 700; letter-spacing: .06em; color: var(--brand); }
+  .code-intro .nl-input p { margin: 8px 0 0; font-size: 16px; color: var(--ink); line-height: 1.6; }
+  .code-intro .arrow-down { display: flex; align-items: center; gap: 10px; color: var(--ink-3); font-size: 13px; margin: 18px 0; font-family: var(--mono); }
+  .code-intro .arrow-down .ln { flex: 1; height: 1px; background: var(--line); }
+  .code-intro .note { font-size: 14px; color: var(--ink-2); }
+  .code-intro .note b { color: var(--ink); }
+  .code-card {
+    background: var(--code-bg); border-radius: var(--radius); box-shadow: var(--shadow-lg);
+    overflow: hidden; border: 1px solid rgba(255,255,255,.06);
+  }
+  .code-bar {
+    display: flex; align-items: center; gap: 8px; padding: 12px 16px;
+    background: var(--code-bg-2); border-bottom: 1px solid rgba(255,255,255,.06);
+  }
+  .code-bar .dots { display: flex; gap: 7px; }
+  .code-bar .dots i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+  .code-bar .fname { font-family: var(--mono); font-size: 12.5px; color: #8fb8ac; margin-left: 8px; }
+  .code-bar .lang { margin-left: auto; font-family: var(--mono); font-size: 11.5px; color: #5f8a7e; border: 1px solid rgba(255,255,255,.1); padding: 2px 8px; border-radius: 6px; }
+  pre.code {
+    margin: 0; padding: 20px 20px 22px; overflow-x: auto;
+    font-family: var(--mono); font-size: 13px; line-height: 1.7; color: var(--code-ink);
+    tab-size: 2;
+  }
+  pre.code .k { color: var(--code-key); }
+  pre.code .s { color: var(--code-str); }
+  pre.code .c { color: var(--code-com); font-style: italic; }
+  pre.code .n { color: var(--code-num); }
+  pre.code .f { color: #9fd0ff; }
+  @media (max-width: 860px){ .code-show { grid-template-columns: 1fr; } }
+
+  /* ---------- Footer ---------- */
+  footer {
+    border-top: 1px solid var(--line); background: var(--bg-tint);
+    padding: 48px 0 40px;
+  }
+  .foot-inner { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 26px; align-items: flex-start; }
+  .foot-brand { max-width: 360px; }
+  .foot-brand .brand { margin-bottom: 12px; }
+  .foot-brand p { color: var(--ink-3); font-size: 14px; margin: 0; }
+  .foot-cols { display: flex; gap: 56px; flex-wrap: wrap; }
+  .foot-col h5 { margin: 0 0 12px; font-size: 13px; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); }
+  .foot-col a { display: block; color: var(--ink-2); font-size: 14.5px; margin-bottom: 9px; }
+  .foot-col a:hover { color: var(--brand); }
+  .foot-bottom {
+    margin-top: 40px; padding-top: 22px; border-top: 1px solid var(--line);
+    display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px;
+    font-size: 13.5px; color: var(--ink-3);
+  }
+  .foot-bottom .lic { font-family: var(--mono); }
+</style>
+</head>
+<body>
+
+<!-- ============ NAV ============ -->
+<header class="nav">
+  <div class="wrap nav-inner">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h18v4H3zM3 12h10v8H3zM17 12h4v8h-4z"/></svg>
+      </span>
+      飞书多维表格插件生成平台
+    </div>
+    <nav class="nav-links">
+      <a href="#audience">为谁打造</a>
+      <a href="#generators">两套生成器</a>
+      <a href="#architecture">架构</a>
+      <a href="#security">安全模型</a>
+      <a class="nav-cta" href="#">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<!-- ============ HERO ============ -->
+<section class="hero">
+  <div class="wrap">
+    <span class="eyebrow"><span class="dot"></span>开源 · MIT · 面向私有化飞书</span>
+    <h1>用<span class="accent">一句话</span>，生成可审计的<br/>飞书 basekit 插件</h1>
+    <p class="sub">自然语言一句话描述需求 → 生成可<b>人工逐行审计</b>的真实飞书 basekit 插件（TypeScript），直接上传到飞书使用。<span class="en">NL → DSL → auditable TS → real Feishu.</span></p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="#">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.2.8-.5v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.4-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.4 11.4 0 0 1 6 0C17.3 4.6 18.3 5 18.3 5c.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.6.8.5 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5Z"/></svg>
+        在 GitHub 上查看
+      </a>
+      <a class="btn btn-ghost" href="#">
+        快速开始
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </a>
+    </div>
+    <div class="hero-meta">
+      <span class="pill"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 生成物=<b>人类可读源码</b>，可自行审计后送审</span>
+      <span class="pill"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 三道编译期护栏，<b>绝不 eval</b></span>
+      <span class="pill"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 端到端已真上传飞书并上线运行</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ AUDIENCE ============ -->
+<section id="audience">
+  <div class="wrap">
+    <span class="eyebrow"><span class="dot"></span>为谁打造 · Who it's for</span>
+    <h2 class="section-title">为私有化部署飞书的企业而生</h2>
+    <p class="section-lead">你有多维表格和插件能力，却<b>没有插件市场、也没有专职开发团队</b>。这套平台把「想要一个插件」到「拿到一份可上线、可审计的源码」之间的距离，压缩成一句话。</p>
+    <div class="audience-grid">
+      <div class="ac-card">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/></svg></div>
+        <h3>信创 / 政企内部</h3>
+        <p>私有化飞书、强合规诉求。源码自带 provenance，可在内部完成代码审计后再送审上线。</p>
+      </div>
+      <div class="ac-card">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg></div>
+        <h3>无开发团队的业务方</h3>
+        <p>运营、HR、财务想接一个外部 API 到表格里，却不会写 TypeScript。用自然语言描述即可。</p>
+      </div>
+      <div class="ac-card">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
+        <h3>缺少插件市场的环境</h3>
+        <p>没有现成插件可装？把需求口述出来，平台直接产出一份可上传的 basekit 工程 zip。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ GENERATORS ============ -->
+<section id="generators" style="background:var(--bg-tint)">
+  <div class="wrap">
+    <span class="eyebrow"><span class="dot"></span>两套生成器 · Two generators</span>
+    <h2 class="section-title">字段捷径 与 自动化，覆盖两类插件</h2>
+    <p class="section-lead">无论是「在表格里加一列、自动算出来」，还是「在自动化流程里调一个 API」，都能从一句话生成。</p>
+    <div class="gen-grid">
+
+      <!-- Field shortcut -->
+      <div class="gen-card">
+        <div class="gen-head">
+          <span class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v6H4zM4 14h10v6H4zM18 14l4 3-4 3"/></svg></span>
+          <div>
+            <h3>字段捷径</h3>
+            <span class="tag">field shortcut · basekit addField</span>
+          </div>
+        </div>
+        <div class="gen-body">
+          <p class="desc">选输入字段 → 调一个外部 API → 把结果写回输出列。支持 4 种鉴权、GET/POST + JSON body、表达式映射与多列 Object 输出。</p>
+          <div class="nl-example">
+            <span class="lbl">一句话示例</span>
+            <p>"读取『金额(USD)』列，调汇率 API 换算成人民币，结果写到『金额(CNY)』，保留两位小数。"</p>
+          </div>
+          <ul class="produces">
+            <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>鉴权：<code style="font-family:var(--mono);font-size:12px;color:var(--brand)">HeaderBearer / QueryParam / CustomHeader / Basic</code></span></li>
+            <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>表达式映射：<code style="font-family:var(--mono);font-size:12px;color:var(--brand)">in.&lt;输入&gt; · res.&lt;响应路径&gt; · 算术 · 数组下标 · rand()</code></span></li>
+            <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>多列 Object 输出 + NumberFormatter 数字格式化</span></li>
+          </ul>
+        </div>
+        <div class="gen-foot">→ 产出：可上传的 addField 插件工程（src/index.ts + meta.json）</div>
+      </div>
+
+      <!-- Automation -->
+      <div class="gen-card">
+        <div class="gen-head">
+          <span class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg></span>
+          <div>
+            <h3>自动化</h3>
+            <span class="tag">automation action · basekit addAction</span>
+          </div>
+        </div>
+        <div class="gen-body">
+          <p class="desc">配置输入 → 调一个外部 API → 返回结果对象，供后续自动化步骤消费。接入飞书 Base 的自动化流水线。</p>
+          <div class="nl-example">
+            <span class="lbl">一句话示例</span>
+            <p>"输入城市名，调天气 API，返回温度和天气状况，供后续『发送通知』步骤使用。"</p>
+          </div>
+          <ul class="produces">
+            <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>鉴权：<code style="font-family:var(--mono);font-size:12px;color:var(--brand)">APIKey</code>，支持 GET/POST + body</span></li>
+            <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>结构化返回对象，可被下游自动化节点直接引用</span></li>
+            <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>已端到端验证</b>：上传 → 发布 → 在真飞书 Base 安装启用 ✓</span></li>
+          </ul>
+        </div>
+        <div class="gen-foot">→ 产出：可上传的 addAction 插件工程（block-basekit-cli upload ✓）</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ============ FLOW ============ -->
+<section id="flow" class="flow">
+  <div class="wrap">
+    <span class="eyebrow"><span class="dot"></span>工作流程 · Pipeline</span>
+    <h2 class="section-title">自然语言 → DSL → 可审计 TS → 真飞书</h2>
+    <p class="section-lead">DSL 只是 LLM 的结构化中间表示，不是运行时；真正交付的是一份你看得懂、改得动的 TypeScript 工程。</p>
+    <div class="steps">
+      <div class="step">
+        <div class="num">1</div>
+        <h4>自然语言</h4>
+        <span class="code-bit">NL · 一句话</span>
+        <p>描述输入字段、要调的 API、要写回的输出。中文即可。</p>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <h4>受约束 DSL</h4>
+        <span class="code-bit">DSL · JSON</span>
+        <p>LLM 经强制 function 调用产出结构化 JSON；schema 与校验器同源，失败自动修复 ≤2 轮。</p>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <h4>可审计 TS</h4>
+        <span class="code-bit">src/index.ts</span>
+        <p>Go 渲染出带 provenance 的 basekit 工程；对真 SDK 类型编译通过。</p>
+      </div>
+      <div class="step">
+        <div class="num">4</div>
+        <h4>真飞书</h4>
+        <span class="code-bit">testField / upload</span>
+        <p>本地真调外部 API 验证，再上传飞书，安装启用即用。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ARCHITECTURE ============ -->
+<section id="architecture">
+  <div class="wrap">
+    <span class="eyebrow"><span class="dot"></span>架构 · Architecture</span>
+    <h2 class="section-title">Go 后端（仅标准库），LLM 只产 DSL</h2>
+    <p class="section-lead">LLM 永远不写最终代码——它只产出受约束的 DSL；可审计的 TypeScript 由确定性的 Go 渲染器生成。<span class="en">Deterministic codegen, LLM stays in the planning lane.</span></p>
+    <div class="arch-figure">
+      <svg viewBox="0 0 940 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="NL 到 DSL 到 basekit TS 到 Feishu FaaS 的架构流程图">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="#15916f"/>
+          </marker>
+          <linearGradient id="gbrand" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#15916f"/><stop offset="1" stop-color="#0f6e56"/>
+          </linearGradient>
+          <style>
+            .box-t { font: 600 15px var(--font, system-ui); fill: #14201c; }
+            .box-s { font: 500 11px ui-monospace, monospace; fill: #6b7a75; }
+            .stage { font: 700 11px ui-monospace, monospace; fill: #15916f; letter-spacing:.08em; }
+            .edge-l { font: 500 11px ui-monospace, monospace; fill: #3c4c47; }
+          </style>
+        </defs>
+
+        <!-- lane labels -->
+        <text x="100" y="28" text-anchor="middle" class="stage">INPUT</text>
+        <text x="340" y="28" text-anchor="middle" class="stage">LLM · PLANNING</text>
+        <text x="600" y="28" text-anchor="middle" class="stage">Go · CODEGEN</text>
+        <text x="850" y="28" text-anchor="middle" class="stage">FEISHU</text>
+
+        <!-- Node 1: NL -->
+        <rect x="30" y="120" width="140" height="92" rx="14" fill="#e6f3ef" stroke="#dde8e4"/>
+        <text x="100" y="160" text-anchor="middle" class="box-t">自然语言</text>
+        <text x="100" y="182" text-anchor="middle" class="box-s">"一句话需求"</text>
+
+        <!-- Node 2: DSL via LLM -->
+        <rect x="252" y="100" width="176" height="132" rx="14" fill="#f1f8f6" stroke="#dde8e4"/>
+        <text x="340" y="134" text-anchor="middle" class="box-t">受约束 DSL</text>
+        <text x="340" y="156" text-anchor="middle" class="box-s">JSON 中间表示</text>
+        <line x1="276" y1="170" x2="404" y2="170" stroke="#dde8e4"/>
+        <text x="340" y="190" text-anchor="middle" class="box-s">DeepSeek / Claude</text>
+        <text x="340" y="208" text-anchor="middle" class="box-s">function call · 自修复≤2</text>
+
+        <!-- Node 3: Go render -> TS -->
+        <rect x="512" y="100" width="176" height="132" rx="14" fill="url(#gbrand)" stroke="#0f6e56"/>
+        <text x="600" y="134" text-anchor="middle" class="box-t" fill="#fff">basekit TS 工程</text>
+        <text x="600" y="156" text-anchor="middle" class="box-s" fill="#cdeee2">src/index.ts</text>
+        <line x1="536" y1="170" x2="664" y2="170" stroke="rgba(255,255,255,.25)"/>
+        <text x="600" y="190" text-anchor="middle" class="box-s" fill="#cdeee2">3 道护栏 + provenance</text>
+        <text x="600" y="208" text-anchor="middle" class="box-s" fill="#cdeee2">testField / testAction</text>
+
+        <!-- Node 4: Feishu FaaS -->
+        <rect x="772" y="120" width="140" height="92" rx="14" fill="#e6f3ef" stroke="#dde8e4"/>
+        <text x="842" y="156" text-anchor="middle" class="box-t">Feishu FaaS</text>
+        <text x="842" y="178" text-anchor="middle" class="box-s">basekit 运行时</text>
+        <text x="842" y="196" text-anchor="middle" class="box-s">addField / addAction</text>
+
+        <!-- edges -->
+        <line x1="172" y1="166" x2="248" y2="166" stroke="#15916f" stroke-width="2" marker-end="url(#arrow)"/>
+        <line x1="430" y1="166" x2="508" y2="166" stroke="#15916f" stroke-width="2" marker-end="url(#arrow)"/>
+        <line x1="690" y1="166" x2="768" y2="166" stroke="#15916f" stroke-width="2" marker-end="url(#arrow)"/>
+        <text x="210" y="156" text-anchor="middle" class="edge-l">infer</text>
+        <text x="469" y="156" text-anchor="middle" class="edge-l">render</text>
+        <text x="729" y="156" text-anchor="middle" class="edge-l">upload</text>
+
+        <!-- validate loop on DSL -->
+        <path d="M300 232 C300 280 380 280 380 232" fill="none" stroke="#15916f" stroke-width="1.6" stroke-dasharray="4 4" marker-end="url(#arrow)"/>
+        <text x="340" y="298" text-anchor="middle" class="edge-l">validate ↺ 校验失败自动修复</text>
+
+        <!-- BFF note -->
+        <rect x="252" y="318" width="436" height="30" rx="9" fill="#f6faf8" stroke="#dde8e4"/>
+        <text x="470" y="338" text-anchor="middle" class="box-s">cmd/api (BFF 网关) · cmd/generator (持 LLM key) · internal/shortcut (DSL·校验·渲染·zip)</text>
+      </svg>
+    </div>
+    <div class="arch-legend">
+      <span><i style="background:#e6f3ef;border:1px solid #dde8e4"></i>用户输入 / 飞书侧</span>
+      <span><i style="background:#f1f8f6;border:1px solid #dde8e4"></i>LLM 规划层（只产 DSL）</span>
+      <span><i style="background:linear-gradient(135deg,#15916f,#0f6e56)"></i>Go 确定性代码生成（可审计产物）</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SECURITY ============ -->
+<section id="security" style="background:var(--bg-tint)">
+  <div class="wrap">
+    <span class="eyebrow"><span class="dot"></span>安全模型 · Security model</span>
+    <h2 class="section-title">三道编译期护栏，源码可审计</h2>
+    <p class="section-lead">护栏在<b>生成阶段静态生效</b>，不依赖运行时沙箱；加上人类可读的源码，让政企客户能在送审前自行核验每一行。</p>
+    <div class="sec-grid">
+      <div class="sec-card">
+        <span class="badge">01</span>
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+        <h3>出网域名白名单</h3>
+        <p>每个外部请求的目标域名在生成时做<b>静态预检</b>；不在白名单内则拒绝产出，杜绝意外出网。</p>
+      </div>
+      <div class="sec-card">
+        <span class="badge">02</span>
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 6-6 6 6 6M16 6l6 6-6 6"/></svg></div>
+        <h3>表达式 allowlist</h3>
+        <p>映射表达式走受限白名单文法（<code>in. / res. / 算术 / 下标 / rand()</code>），<b>绝不 eval、绝不执行任意代码</b>。</p>
+      </div>
+      <div class="sec-card">
+        <span class="badge">03</span>
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1.5 1.5M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg></div>
+        <h3>URL 占位符校验</h3>
+        <p>URL 模板中的占位符与字段、鉴权参数严格对应；非法或悬空占位符在生成期即被拦下。</p>
+      </div>
+    </div>
+    <div class="sec-banner">
+      <span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13l2 2 4-4"/></svg></span>
+      <div>
+        <h3>可审计源码 · Auditable by design</h3>
+        <p>生成物是带 provenance 的人类可读 TypeScript，而非黑盒二进制——对信创 / 政企是正面卖点：可自行审计后再送审上线。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CODE SHOWCASE ============ -->
+<section id="code">
+  <div class="wrap">
+    <span class="eyebrow"><span class="dot"></span>代码展示 · From one sentence to code</span>
+    <h2 class="section-title">输入一句话，产出 src/index.ts</h2>
+    <p class="section-lead">下面是字段捷径生成器的代表性产物片段——你拿到的就是这样一份可读、可改、可审计的 basekit 源码。</p>
+    <div class="code-show">
+      <div class="code-intro">
+        <div class="nl-input">
+          <span class="lbl">// 自然语言输入</span>
+          <p>"读取『金额(USD)』列，调汇率 API 把美元换算成人民币，结果写到『金额(CNY)』，保留两位小数。"</p>
+        </div>
+        <div class="arrow-down"><span class="ln"></span>NL → DSL → render<span class="ln"></span></div>
+        <p class="note">生成器先经 LLM 产出受约束 DSL，再由 Go 渲染器输出右侧 TypeScript。每个 <b>basekit API</b> 都是真实 SDK 调用，可对 <code>@lark-opdev/block-basekit-server-api</code> 类型直接编译。</p>
+      </div>
+      <div class="code-card">
+        <div class="code-bar">
+          <span class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></span>
+          <span class="fname">src/index.ts</span>
+          <span class="lang">TypeScript · basekit addField</span>
+        </div>
+<pre class="code"><span class="c">// generated by feishu-plugin-platform · provenance: dsl@usd2cny</span>
+<span class="k">import</span> { basekit, FieldType, AuthorizationType } <span class="k">from</span> <span class="s">'@lark-opdev/block-basekit-server-api'</span>;
+<span class="k">const</span> { t } = basekit;
+
+<span class="c">// guardrail #1 — 出网域名白名单（生成期静态预检）</span>
+basekit.<span class="f">addDomainList</span>([<span class="s">'api.exchangerate.host'</span>]);
+
+basekit.<span class="f">addField</span>({
+  formItems: [{
+    key: <span class="s">'amountUsd'</span>,
+    label: <span class="s">'金额(USD)'</span>,
+    component: { type: <span class="s">'FieldSelect'</span>, props: { supportType: [FieldType.Number] } },
+  }],
+  authorizations: [{
+    id: <span class="s">'rateAuth'</span>,
+    type: AuthorizationType.<span class="f">HeaderBearerToken</span>,   <span class="c">// 4 选 1 鉴权</span>
+  }],
+  <span class="c">// guardrail #3 — URL 占位符对齐已校验字段/鉴权</span>
+  execute: <span class="k">async</span> (formItemParams, context) => {
+    <span class="k">const</span> usd = formItemParams.amountUsd?.[<span class="n">0</span>]?.value;
+    <span class="k">const</span> res = <span class="k">await</span> context.<span class="f">fetch</span>(
+      <span class="s">`https://api.exchangerate.host/convert?from=USD&to=CNY&amount=${usd}`</span>,
+      { method: <span class="s">'GET'</span> },
+    ).<span class="f">then</span>(r => r.json());
+
+    <span class="c">// guardrail #2 — 受限表达式 allowlist（绝不 eval）</span>
+    <span class="c">// dsl: out.cny = res.result ; round(2)</span>
+    <span class="k">const</span> cny = <span class="f">Number</span>(res.result.<span class="f">toFixed</span>(<span class="n">2</span>));
+
+    <span class="k">return</span> { code: FieldCode.Success, data: { cny } };
+  },
+  resultType: {
+    type: FieldType.Number,
+    extra: { formatter: <span class="s">'0.00'</span> },   <span class="c">// NumberFormatter</span>
+  },
+});
+
+<span class="k">export default</span> basekit;
+</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer>
+  <div class="wrap">
+    <div class="foot-inner">
+      <div class="foot-brand">
+        <div class="brand">
+          <span class="logo" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h18v4H3zM3 12h10v8H3zM17 12h4v8h-4z"/></svg>
+          </span>
+          飞书多维表格插件生成平台
+        </div>
+        <p>自然语言一句话 → 可审计的真实飞书 basekit 插件。<span class="en">Feishu Bitable Plugin Generator.</span></p>
+      </div>
+      <div class="foot-cols">
+        <div class="foot-col">
+          <h5>项目</h5>
+          <a href="#">GitHub 仓库</a>
+          <a href="#">快速开始</a>
+          <a href="#architecture">架构说明</a>
+          <a href="#security">安全模型</a>
+        </div>
+        <div class="foot-col">
+          <h5>生成器</h5>
+          <a href="#generators">字段捷径 addField</a>
+          <a href="#generators">自动化 addAction</a>
+          <a href="#code">生成物示例</a>
+        </div>
+        <div class="foot-col">
+          <h5>资源</h5>
+          <a href="#">README</a>
+          <a href="#">CLI · shortcutgen</a>
+          <a href="#">Issues</a>
+        </div>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <span class="lic">© 2026 feishu-plugin-platform · Licensed under <b>MIT</b></span>
+      <span>Built with Go (stdlib) · TypeScript · DeepSeek / Claude · basekit SDK</span>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

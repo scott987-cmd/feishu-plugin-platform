@@ -1,0 +1,27 @@
+# Ingress for the API (TLS terminates here). Set your real host and ingress
+# class; add a tls block with a cert (e.g. cert-manager) for HTTPS in prod.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: platform
+  namespace: feishu-plugin-platform
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # cert-manager issues/renews the cert into the secret named in tls.secretName.
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: ["platform.example.internal"]
+      secretName: platform-tls
+  rules:
+    - host: platform.example.internal
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 80

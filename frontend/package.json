@@ -1,0 +1,26 @@
+{
+  "name": "feishu-plugin-platform-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "在 Feishu 多维表格中运行的容器插件 (container plugin) — 读取平台 API 中的 AppDefinition (DSL)，并用 js-sdk 读取宿主表格真实数据进行渲染。",
+  "scripts": {
+    "start": "webpack serve --mode development",
+    "build": "webpack --mode production",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lark-base-open/js-sdk": "^1.0.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "html-webpack-plugin": "^5.6.3",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.6.3",
+    "webpack": "^5.96.1",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^5.1.0"
+  }
+}

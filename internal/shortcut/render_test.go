@@ -1,0 +1,206 @@
+package shortcut_test
+
+import (
+	"encoding/json"
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/dushibing/feishu-plugin-platform/internal/shortcut"
+)
+
+func loadExchangeRate(t *testing.T) shortcut.FieldShortcut {
+	t.Helper()
+	data, err := os.ReadFile("testdata/exchange_rate.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var f shortcut.FieldShortcut
+	if err := json.Unmarshal(data, &f); err != nil {
+		t.Fatal(err)
+	}
+	return f
+}
+
+func TestExchangeRateValidAndRenders(t *testing.T) {
+	f := loadExchangeRate(t)
+	if err := f.Validate(); err != nil {
+		t.Fatalf("exchange_rate.json should validate, got: %v", err)
+	}
+	ts, err := shortcut.RenderIndexTS(f)
+	if err != nil {
+		t.Fatalf("render failed: %v", err)
+	}
+	wants := []string{
+		"basekit.addDomainList(['api.exchangerate-api.com']);",
+		"import { basekit, FieldType, field, FieldComponent, FieldCode, NumberFormatter, AuthorizationType }",
+		"component: FieldComponent.FieldSelect,",
+		"props: { supportType: [FieldType.Number] },",
+		"type: FieldType.Object,",
+		"isGroupByKey: true,",
+		"NumberFormatter.DIGITAL_ROUNDED_2",
+		// expression translation: in.* -> inp.*, res.* -> optional chaining, rand() -> Math.random
+		"usd: inp.account * res?.rates?.USD,",
+		"rate: res?.rates?.USD,",
+		"id: String(Math.random()),",
+		"await fetch(`https://api.exchangerate-api.com/v4/latest/CNY`, { method: 'GET' });",
+		"export default basekit;",
+	}
+	for _, w := range wants {
+		if !strings.Contains(ts, w) {
+			t.Errorf("rendered TS missing:\n  %s", w)
+		}
+	}
+}
+
+func TestArrayIndexExpr(t *testing.T) {
+	f := loadExchangeRate(t)
+	// A response array path, as weather/list APIs return.
+	f.Result.Properties[1].Expr = "res.weather.0.description"
+	if err := f.Validate(); err != nil {
+		t.Fatalf("array-index expr should validate, got: %v", err)
+	}
+	ts, err := shortcut.RenderIndexTS(f)
+	if err != nil {
+		t.Fatalf("render failed: %v", err)
+	}
+	if !strings.Contains(ts, "res?.weather?.[0]?.description") {
+		t.Errorf("array index not translated correctly; want res?.weather?.[0]?.description in:\n%s", ts)
+	}
+}
+
+func TestQueryParamAuthRenders(t *testing.T) {
+	f := loadExchangeRate(t)
+	f.Auth = &shortcut.Auth{
+		ID: "owmKey", Type: "QueryParamToken", Label: "OpenWeatherMap API Key",
+		Platform: "OpenWeatherMap", InstructionsURL: "https://openweathermap.org/api", ParamName: "appid",
+	}
+	if err := f.Validate(); err != nil {
+		t.Fatalf("query-param auth should validate, got: %v", err)
+	}
+	ts, err := shortcut.RenderIndexTS(f)
+	if err != nil {
+		t.Fatalf("render failed: %v", err)
+	}
+	for _, w := range []string{
+		"authorizations: [",
+		"type: AuthorizationType.QueryParamToken,",
+		"params: { paramName: 'appid' },",
+		"icon: { light:",
+		// execute passes the auth id so the runtime injects the credential
+		"{ method: 'GET' }, 'owmKey');",
+	} {
+		if !strings.Contains(ts, w) {
+			t.Errorf("auth render missing: %s", w)
+		}
+	}
+}
+
+func TestCustomHeaderAndBasicAuth(t *testing.T) {
+	// CustomHeaderToken renders params.headerName (hyphenated header allowed).
+	f := loadExchangeRate(t)
+	f.Auth = &shortcut.Auth{ID: "k", Type: "CustomHeaderToken", Label: "API Key", Platform: "Acme", InstructionsURL: "https://acme/keys", ParamName: "X-API-Key"}
+	if err := f.Validate(); err != nil {
+		t.Fatalf("CustomHeaderToken should validate, got: %v", err)
+	}
+	ts, _ := shortcut.RenderIndexTS(f)
+	if !strings.Contains(ts, "type: AuthorizationType.CustomHeaderToken,") || !strings.Contains(ts, "params: { headerName: 'X-API-Key' },") {
+		t.Errorf("CustomHeaderToken render wrong:\n%s", ts)
+	}
+	// Basic renders no params block.
+	f.Auth = &shortcut.Auth{ID: "b", Type: "Basic", Label: "Login", Platform: "Acme", InstructionsURL: "https://acme/login"}
+	if err := f.Validate(); err != nil {
+		t.Fatalf("Basic should validate without paramName, got: %v", err)
+	}
+	ts, _ = shortcut.RenderIndexTS(f)
+	if !strings.Contains(ts, "type: AuthorizationType.Basic,") || strings.Contains(ts, "params:") {
+		t.Errorf("Basic render wrong (should have no params):\n%s", ts)
+	}
+}
+
+func TestBearerAuthValidatesNoParamName(t *testing.T) {
+	f := loadExchangeRate(t)
+	f.Auth = &shortcut.Auth{ID: "tok", Type: "HeaderBearerToken", Label: "Token", Platform: "X", InstructionsURL: "https://x"}
+	if err := f.Validate(); err != nil {
+		t.Fatalf("bearer auth should validate without paramName, got: %v", err)
+	}
+	// QueryParamToken without paramName must fail.
+	f.Auth.Type = "QueryParamToken"
+	f.Auth.ParamName = ""
+	if err := f.Validate(); err == nil {
+		t.Error("QueryParamToken without paramName should fail validation")
+	}
+}
+
+func TestPostBodyRenders(t *testing.T) {
+	f := loadExchangeRate(t)
+	f.Domains = []string{"httpbin.org"}
+	f.Execute = shortcut.Execute{
+		URL: "https://httpbin.org/post", Method: "POST",
+		Body: map[string]string{"amount": "{account}", "currency": "CNY"},
+	}
+	if err := f.Validate(); err != nil {
+		t.Fatalf("POST body should validate, got: %v", err)
+	}
+	ts, err := shortcut.RenderIndexTS(f)
+	if err != nil {
+		t.Fatalf("render failed: %v", err)
+	}
+	for _, w := range []string{
+		"'Content-Type': 'application/json'",
+		// keys rendered in sorted order; {account} → inp.account, literal → quoted
+		"body: JSON.stringify({ amount: inp.account, currency: 'CNY' })",
+	} {
+		if !strings.Contains(ts, w) {
+			t.Errorf("POST body render missing: %s", w)
+		}
+	}
+}
+
+func TestPostBodyRejectedOnGet(t *testing.T) {
+	f := loadExchangeRate(t)
+	f.Execute.Body = map[string]string{"x": "{account}"} // method is GET → invalid
+	if err := f.Validate(); err == nil {
+		t.Error("body with GET method should fail validation")
+	}
+}
+
+func TestRejections(t *testing.T) {
+	base := loadExchangeRate(t)
+
+	cases := []struct {
+		name string
+		mut  func(*shortcut.FieldShortcut)
+	}{
+		{"empty domains", func(f *shortcut.FieldShortcut) { f.Domains = nil }},
+		{"host not in allowlist", func(f *shortcut.FieldShortcut) {
+			f.Execute.URL = "https://evil.example.com/x"
+		}},
+		{"expr arbitrary code", func(f *shortcut.FieldShortcut) {
+			f.Result.Properties[1].Expr = "process.exit(1)"
+		}},
+		{"expr unknown form item", func(f *shortcut.FieldShortcut) {
+			f.Result.Properties[1].Expr = "in.nope * 2"
+		}},
+		{"expr forbidden token", func(f *shortcut.FieldShortcut) {
+			f.Result.Properties[1].Expr = "res.a; in.account"
+		}},
+		{"bad component", func(f *shortcut.FieldShortcut) { f.FormItems[0].Component = "Wat" }},
+		{"bad field type", func(f *shortcut.FieldShortcut) { f.Result.Properties[1].Type = "Blob" }},
+		{"bad method", func(f *shortcut.FieldShortcut) { f.Execute.Method = "TRACE" }},
+		{"url placeholder unknown", func(f *shortcut.FieldShortcut) {
+			f.Execute.URL = "https://api.exchangerate-api.com/{nope}"
+		}},
+	}
+	for _, c := range cases {
+		f := base // shallow copy; deep enough since muts target distinct fields
+		// deep copy slices we mutate
+		f.Domains = append([]string(nil), base.Domains...)
+		f.FormItems = append([]shortcut.FormItem(nil), base.FormItems...)
+		f.Result.Properties = append([]shortcut.ResultProp(nil), base.Result.Properties...)
+		c.mut(&f)
+		if err := f.Validate(); err == nil {
+			t.Errorf("%s: expected validation error, got nil", c.name)
+		}
+	}
+}

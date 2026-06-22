@@ -1,0 +1,49 @@
+# NetworkPolicies. Requires a CNI that enforces them (Calico / Cilium). The k3s
+# default flannel does NOT enforce NetworkPolicy — these become no-ops there.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: feishu-plugin-platform
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+---
+# Generator is internal: only the api may reach it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-to-generator
+  namespace: feishu-plugin-platform
+spec:
+  podSelector:
+    matchLabels: { app: generator }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app: api }
+      ports:
+        - protocol: TCP
+          port: 8090
+---
+# API is the public entry (behind the ingress controller). Source is scoped to
+# the ingress controller's namespace — change the label to match your controller
+# (e.g. ingress-nginx / kube-system) if different.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-api
+  namespace: feishu-plugin-platform
+spec:
+  podSelector:
+    matchLabels: { app: api }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
