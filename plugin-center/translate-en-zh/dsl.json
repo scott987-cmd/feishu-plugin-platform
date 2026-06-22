@@ -1,0 +1,56 @@
+{
+  "id": "english-to-chinese",
+  "title": {
+    "zh_CN": "英文→中文翻译",
+    "en_US": "English→Chinese Translation",
+    "ja_JP": "英語→中国語翻訳"
+  },
+  "domains": [
+    "api.mymemory.translated.net"
+  ],
+  "formItems": [
+    {
+      "key": "text",
+      "label": {
+        "zh_CN": "待翻译文本",
+        "en_US": "Text to translate",
+        "ja_JP": "翻訳するテキスト"
+      },
+      "component": "FieldSelect",
+      "supportType": [
+        "Text"
+      ],
+      "required": true
+    }
+  ],
+  "result": {
+    "kind": "object",
+    "properties": [
+      {
+        "key": "translated_text",
+        "type": "Text",
+        "label": {
+          "zh_CN": "译文",
+          "en_US": "Translation",
+          "ja_JP": "翻訳文"
+        },
+        "primary": true,
+        "expr": "res.responseData.translatedText"
+      },
+      {
+        "key": "_id",
+        "type": "Text",
+        "label": {
+          "zh_CN": ""
+        },
+        "hidden": true,
+        "groupByKey": true,
+        "expr": "rand()"
+      }
+    ]
+  },
+  "execute": {
+    "url": "https://api.mymemory.translated.net/get?q={text}\u0026langpair=en|zh",
+    "method": "GET"
+  }
+}

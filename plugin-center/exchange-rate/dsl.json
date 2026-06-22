@@ -1,0 +1,70 @@
+{
+  "id": "cny-to-usd",
+  "title": {
+    "zh_CN": "人民币→美元汇率换算",
+    "en_US": "CNY to USD Converter",
+    "ja_JP": "人民元→米ドル換算"
+  },
+  "domains": [
+    "api.exchangerate-api.com"
+  ],
+  "formItems": [
+    {
+      "key": "amount",
+      "label": {
+        "zh_CN": "人民币金额",
+        "en_US": "Amount (CNY)",
+        "ja_JP": "人民元金額"
+      },
+      "component": "FieldSelect",
+      "supportType": [
+        "Number"
+      ],
+      "required": true
+    }
+  ],
+  "result": {
+    "kind": "object",
+    "properties": [
+      {
+        "key": "_id",
+        "type": "Text",
+        "label": {
+          "zh_CN": "行ID",
+          "en_US": "Row ID",
+          "ja_JP": "行ID"
+        },
+        "hidden": true,
+        "groupByKey": true,
+        "expr": "rand()"
+      },
+      {
+        "key": "usd_amount",
+        "type": "Number",
+        "label": {
+          "zh_CN": "美元金额",
+          "en_US": "USD Amount",
+          "ja_JP": "米ドル金額"
+        },
+        "primary": true,
+        "formatter": "DIGITAL_ROUNDED_2",
+        "expr": "in.amount * res.rates.USD"
+      },
+      {
+        "key": "rate",
+        "type": "Number",
+        "label": {
+          "zh_CN": "当前汇率",
+          "en_US": "Exchange Rate",
+          "ja_JP": "為替レート"
+        },
+        "formatter": "DIGITAL_ROUNDED_4",
+        "expr": "res.rates.USD"
+      }
+    ]
+  },
+  "execute": {
+    "url": "https://api.exchangerate-api.com/v4/latest/CNY",
+    "method": "GET"
+  }
+}

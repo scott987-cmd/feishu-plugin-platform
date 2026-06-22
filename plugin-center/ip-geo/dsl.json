@@ -1,0 +1,78 @@
+{
+  "id": "ip-geo-lookup",
+  "title": {
+    "zh_CN": "IP地理位置查询",
+    "en_US": "IP Geo Location",
+    "ja_JP": "IP地理位置"
+  },
+  "domains": [
+    "ip-api.com"
+  ],
+  "formItems": [
+    {
+      "key": "ip",
+      "label": {
+        "zh_CN": "IP地址",
+        "en_US": "IP Address",
+        "ja_JP": "IPアドレス"
+      },
+      "component": "FieldSelect",
+      "supportType": [
+        "Text"
+      ],
+      "required": true
+    }
+  ],
+  "result": {
+    "kind": "object",
+    "properties": [
+      {
+        "key": "country",
+        "type": "Text",
+        "label": {
+          "zh_CN": "国家",
+          "en_US": "Country",
+          "ja_JP": "国"
+        },
+        "primary": true,
+        "expr": "res.country"
+      },
+      {
+        "key": "city",
+        "type": "Text",
+        "label": {
+          "zh_CN": "城市",
+          "en_US": "City",
+          "ja_JP": "都市"
+        },
+        "expr": "res.city"
+      },
+      {
+        "key": "isp",
+        "type": "Text",
+        "label": {
+          "zh_CN": "运营商",
+          "en_US": "ISP",
+          "ja_JP": "ISP"
+        },
+        "expr": "res.isp"
+      },
+      {
+        "key": "_id",
+        "type": "Text",
+        "label": {
+          "zh_CN": "ID",
+          "en_US": "ID",
+          "ja_JP": "ID"
+        },
+        "hidden": true,
+        "groupByKey": true,
+        "expr": "rand()"
+      }
+    ]
+  },
+  "execute": {
+    "url": "http://ip-api.com/json/{ip}",
+    "method": "GET"
+  }
+}

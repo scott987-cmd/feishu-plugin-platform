@@ -125,6 +125,32 @@ func validateURLTemplate(u string, domains []string, formKeys map[string]bool) e
 	return fmt.Errorf("host %q is not covered by domains allowlist %v (addDomainList would reject the request)", host, domains)
 }
 
+var resRefRe = regexp.MustCompile(`\bres\.`)
+
+// validateExprMode is validateExpr plus a mode gate: in compute-only mode there
+// is no fetched response, so res.* is forbidden (reference inputs or a template).
+func validateExprMode(expr string, formKeys map[string]bool, allowRes bool) error {
+	if !allowRes && resRefRe.MatchString(expr) {
+		return errors.New("res.* not allowed without a fetch (compute-only): reference inputs (in.*) or use a template")
+	}
+	return validateExpr(expr, formKeys)
+}
+
+// validatePlaceholders gates a template string (rendered later as a JS template
+// literal): no backtick / backslash / ${ injection, and every {key} must be a
+// declared form item.
+func validatePlaceholders(tpl string, formKeys map[string]bool) error {
+	if strings.ContainsAny(tpl, "`\\") || strings.Contains(tpl, "${") {
+		return errors.New("template must not contain a backtick, backslash, or ${")
+	}
+	for _, m := range placeholder.FindAllStringSubmatch(tpl, -1) {
+		if !formKeys[m[1]] {
+			return fmt.Errorf("template placeholder {%s} references unknown form item", m[1])
+		}
+	}
+	return nil
+}
+
 var bodyRefRe = regexp.MustCompile(`^\{([A-Za-z_][A-Za-z0-9_]*)\}$`)
 
 // bodyRef returns the form-item key if v is exactly "{key}" (an input injection),

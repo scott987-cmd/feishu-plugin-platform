@@ -33,6 +33,15 @@ func renderBodyValue(v string) string {
 	return jsStr(v)
 }
 
+// renderPropValue lowers a result property's value to JS: a template renders as
+// a JS template literal (`...${inp.key}...`); otherwise the expression is translated.
+func renderPropValue(p ResultProp) string {
+	if strings.TrimSpace(p.Template) != "" {
+		return "`" + renderURLTemplate(p.Template) + "`"
+	}
+	return translateExpr(p.Expr)
+}
+
 // tsType maps a FieldType enum name to the TS type of an input param.
 func tsType(fieldType string) string {
 	switch fieldType {
@@ -90,13 +99,15 @@ func RenderIndexTS(f FieldShortcut) (string, error) {
 	w("import { basekit, FieldType, field, FieldComponent, FieldCode, NumberFormatter, AuthorizationType } from '@lark-opdev/block-basekit-server-api';\n")
 	w("const { t } = field;\n\n")
 
-	// Domain allowlist — exactly one addDomainList call (multiple would overwrite).
-	quoted := make([]string, len(f.Domains))
-	for i, d := range f.Domains {
-		quoted[i] = jsStr(d)
+	// Domain allowlist — only needed when the shortcut makes an outbound request.
+	if len(f.Domains) > 0 {
+		quoted := make([]string, len(f.Domains))
+		for i, d := range f.Domains {
+			quoted[i] = jsStr(d)
+		}
+		w("// 出网域名白名单(只能调用一次,多次会互相覆盖)\n")
+		w("basekit.addDomainList([%s]);\n\n", strings.Join(quoted, ", "))
 	}
-	w("// 出网域名白名单(只能调用一次,多次会互相覆盖)\n")
-	w("basekit.addDomainList([%s]);\n\n", strings.Join(quoted, ", "))
 
 	w("basekit.addField({\n")
 
@@ -188,29 +199,32 @@ func RenderIndexTS(f FieldShortcut) (string, error) {
 	w("    const inp: Record<string, any> = formItemParams;\n")
 	b.WriteString(executeHelpers)
 	w("    try {\n")
-	// Build the fetch init object (method + optional JSON body) and optional authId.
-	init := fmt.Sprintf("{ method: %s }", jsStr(f.Execute.Method))
-	if len(f.Execute.Body) > 0 {
-		bodyKeys := make([]string, 0, len(f.Execute.Body))
-		for k := range f.Execute.Body {
-			bodyKeys = append(bodyKeys, k)
+	if strings.TrimSpace(f.Execute.URL) != "" {
+		// Fetch mode: build the init object (method + optional JSON body) + optional authId.
+		init := fmt.Sprintf("{ method: %s }", jsStr(f.Execute.Method))
+		if len(f.Execute.Body) > 0 {
+			bodyKeys := make([]string, 0, len(f.Execute.Body))
+			for k := range f.Execute.Body {
+				bodyKeys = append(bodyKeys, k)
+			}
+			sort.Strings(bodyKeys)
+			parts := make([]string, len(bodyKeys))
+			for i, k := range bodyKeys {
+				parts[i] = fmt.Sprintf("%s: %s", k, renderBodyValue(f.Execute.Body[k]))
+			}
+			init = fmt.Sprintf("{ method: %s, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ %s }) }",
+				jsStr(f.Execute.Method), strings.Join(parts, ", "))
 		}
-		sort.Strings(bodyKeys)
-		parts := make([]string, len(bodyKeys))
-		for i, k := range bodyKeys {
-			parts[i] = fmt.Sprintf("%s: %s", k, renderBodyValue(f.Execute.Body[k]))
+		authArg := ""
+		if f.Auth != nil {
+			authArg = ", " + jsStr(f.Auth.ID) // basekit runtime injects the user's credential
 		}
-		init = fmt.Sprintf("{ method: %s, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ %s }) }",
-			jsStr(f.Execute.Method), strings.Join(parts, ", "))
+		w("      const res: any = await fetch(`%s`, %s%s);\n", renderURLTemplate(f.Execute.URL), init, authArg)
 	}
-	authArg := ""
-	if f.Auth != nil {
-		authArg = ", " + jsStr(f.Auth.ID) // basekit runtime injects the user's credential
-	}
-	w("      const res: any = await fetch(`%s`, %s%s);\n", renderURLTemplate(f.Execute.URL), init, authArg)
+	// else: compute-only — no outbound request; outputs come from inputs/templates.
 	w("      return {\n        code: FieldCode.Success,\n        data: {\n")
 	for _, p := range f.Result.Properties {
-		w("          %s: %s,\n", p.Key, translateExpr(p.Expr))
+		w("          %s: %s,\n", p.Key, renderPropValue(p))
 	}
 	w("        },\n      };\n")
 	w("    } catch (e) {\n")

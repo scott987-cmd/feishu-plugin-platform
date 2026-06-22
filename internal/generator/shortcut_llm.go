@@ -31,8 +31,8 @@ const (
 		"Examples: `in.account * res.rates.USD` , `res.data.title` , `rand()`. " +
 		"(4) Include one hidden Text property with isGroupByKey via groupByKey=true and expr `rand()` as a stable row id. " +
 		"(5) execute.url may contain {formItemKey} placeholders. For a POST API, set method=POST and execute.body (JSON sent as application/json); a body value of exactly \"{formKey}\" injects that input, anything else is a literal. " +
-		"(6) If the API needs a key/token, add `auth` (the END-USER enters it — never hardcode, never put the token in execute.url): " +
-		"choose the type: QueryParamToken with paramName (e.g. appid) when the key goes in the URL query; HeaderBearerToken for an Authorization: Bearer header; CustomHeaderToken with paramName set to the header name (e.g. X-API-Key); Basic for username+password. Omit auth for open APIs. " +
+		"(5b) COMPUTE-ONLY / 'the URL is the result' (NO fetch): when the API returns an image/file/binary you just build a URL for (QR code, chart, screenshot generators like api.qrserver.com), OR the plugin is pure local formatting/concatenation — then OMIT `execute` and `domains` entirely, and give each output a `template` (string with {formKey} placeholders) instead of `expr`. Do NOT invent res.<path> for an API that returns an image. " +
+		"(6) AUTH — default to NONE. Most public APIs (ip-api.com, exchangerate-api.com, api.mymemory.translated.net, open-data APIs) need NO key: you MUST omit `auth` entirely for them — adding auth to a keyless API BREAKS the plugin. Add `auth` ONLY when the API genuinely requires a credential the user must obtain; then pick the type (the END-USER enters it — never hardcode, never put the token in execute.url): QueryParamToken+paramName (key in URL query, e.g. appid); HeaderBearerToken (Authorization: Bearer); CustomHeaderToken+paramName=header name (e.g. X-API-Key); Basic (username+password). When unsure, omit auth. " +
 		"Reuse names implied by the user's request; pick sensible field types and number formatters. id is a lowercase ascii slug like exchange-rate."
 )
 
@@ -73,7 +73,7 @@ func fieldShortcutSchema() map[string]any {
 	}
 	resultProp := map[string]any{
 		"type":     "object",
-		"required": []string{"key", "type", "expr"},
+		"required": []string{"key", "type"},
 		"properties": map[string]any{
 			"key":        d(str, "ascii output column key"),
 			"type":       enum(shortcut.ValidFieldTypes),
@@ -82,12 +82,13 @@ func fieldShortcutSchema() map[string]any {
 			"hidden":     boolean,
 			"groupByKey": d(boolean, "set true on a hidden Text id column whose expr is rand()"),
 			"formatter":  d(enum(shortcut.ValidFormatters), "optional number formatter"),
-			"expr":       d(str, "value expression: number | rand() | in.<formKey> | res.<json.path>, with + - * / ( )"),
+			"expr":       d(str, "value EXPRESSION (use when there is a fetch): number | rand() | in.<formKey> | res.<json.path>, with + - * / ( ). Give either expr OR template, not both."),
+			"template":   d(str, "value TEMPLATE (use for compute-only / 'the URL is the result' plugins, NO fetch): a literal string with {formKey} placeholders, e.g. https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={text}. References inputs only."),
 		},
 	}
 	return map[string]any{
 		"type":     "object",
-		"required": []string{"id", "title", "domains", "formItems", "result", "execute"},
+		"required": []string{"id", "title", "formItems", "result"},
 		"properties": map[string]any{
 			"id":        d(str, "lowercase ascii slug, e.g. exchange-rate"),
 			"title":     i18nObj,

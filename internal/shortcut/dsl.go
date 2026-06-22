@@ -84,7 +84,12 @@ type ResultProp struct {
 	// Expr is the value expression, over two namespaces: in.<formKey> (inputs)
 	// and res.<json.path> (fetched response), plus + - * / ( ) and rand().
 	// Validated/allowlisted at compile time — never arbitrary code.
-	Expr string `json:"expr"`
+	Expr string `json:"expr,omitempty"`
+	// Template is an alternative to Expr: a literal string with {formKey}
+	// placeholders, rendered as a JS template literal. Used for compute-only /
+	// "URL is the result" plugins (QR/image/chart-gen, formatting/concatenation)
+	// where there is no fetched response to map. References inputs only.
+	Template string `json:"template,omitempty"`
 }
 
 // Execute is the (single) outbound request the shortcut performs before mapping.
@@ -138,8 +143,12 @@ func (f FieldShortcut) Validate() error {
 	if f.Title.empty() {
 		errs = append(errs, errors.New("title.zh_CN is required"))
 	}
-	if len(f.Domains) == 0 {
-		errs = append(errs, errors.New("domains must not be empty (addDomainList allowlist)"))
+	// Two modes: fetch (calls execute.url, may map res.*) vs compute-only (no
+	// outbound request — outputs are templates / input-only expressions, e.g.
+	// QR/image/chart "URL is the result", or local formatting).
+	fetchMode := strings.TrimSpace(f.Execute.URL) != ""
+	if fetchMode && len(f.Domains) == 0 {
+		errs = append(errs, errors.New("domains must not be empty when execute.url is set (addDomainList allowlist)"))
 	}
 	if len(f.Domains) > MaxDomains {
 		errs = append(errs, fmt.Errorf("too many domains (%d > %d)", len(f.Domains), MaxDomains))
@@ -216,18 +225,34 @@ func (f FieldShortcut) Validate() error {
 		if p.Formatter != "" && !slices.Contains(ValidFormatters, p.Formatter) {
 			errs = append(errs, fmt.Errorf("result.properties[%d].formatter %q invalid", i, p.Formatter))
 		}
-		if err := validateExpr(p.Expr, formKeys); err != nil {
-			errs = append(errs, fmt.Errorf("result.properties[%d].expr: %w", i, err))
+		// Each property is either a template (string with {key} placeholders) or
+		// an expression. res.* is only valid in fetch mode.
+		hasTpl := strings.TrimSpace(p.Template) != ""
+		hasExpr := strings.TrimSpace(p.Expr) != ""
+		switch {
+		case hasTpl && hasExpr:
+			errs = append(errs, fmt.Errorf("result.properties[%d]: set either expr or template, not both", i))
+		case hasTpl:
+			if err := validatePlaceholders(p.Template, formKeys); err != nil {
+				errs = append(errs, fmt.Errorf("result.properties[%d].template: %w", i, err))
+			}
+		case hasExpr:
+			if err := validateExprMode(p.Expr, formKeys, fetchMode); err != nil {
+				errs = append(errs, fmt.Errorf("result.properties[%d].expr: %w", i, err))
+			}
+		default:
+			errs = append(errs, fmt.Errorf("result.properties[%d]: needs an expr or a template", i))
 		}
 	}
 
-	if strings.TrimSpace(f.Execute.URL) == "" {
-		errs = append(errs, errors.New("execute.url is required"))
-	} else if err := validateURLTemplate(f.Execute.URL, f.Domains, formKeys); err != nil {
-		errs = append(errs, fmt.Errorf("execute.url: %w", err))
-	}
-	if !slices.Contains(ValidMethods, f.Execute.Method) {
-		errs = append(errs, fmt.Errorf("execute.method %q invalid (want %s)", f.Execute.Method, strings.Join(ValidMethods, ", ")))
+	// execute is optional: present = fetch mode (validate it); absent = compute-only.
+	if fetchMode {
+		if err := validateURLTemplate(f.Execute.URL, f.Domains, formKeys); err != nil {
+			errs = append(errs, fmt.Errorf("execute.url: %w", err))
+		}
+		if !slices.Contains(ValidMethods, f.Execute.Method) {
+			errs = append(errs, fmt.Errorf("execute.method %q invalid (want %s)", f.Execute.Method, strings.Join(ValidMethods, ", ")))
+		}
 	}
 	if len(f.Execute.Body) > 0 {
 		if f.Execute.Method != "POST" {

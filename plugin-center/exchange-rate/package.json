@@ -1,0 +1,18 @@
+{
+  "name": "cny-to-usd",
+  "version": "1.0.0",
+  "description": "人民币→美元汇率换算",
+  "main": "index.js",
+  "scripts": {
+    "start": "block-basekit-cli start:field",
+    "build": "block-basekit-cli build:field",
+    "pack": "block-basekit-cli pack:field"
+  },
+  "license": "ISC",
+  "devDependencies": {
+    "@lark-opdev/block-basekit-cli": "1.0.5"
+  },
+  "dependencies": {
+    "@lark-opdev/block-basekit-server-api": "1.0.6"
+  }
+}

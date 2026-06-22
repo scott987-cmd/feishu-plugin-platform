@@ -1,0 +1,54 @@
+{
+  "id": "qr-code-generator",
+  "title": {
+    "zh_CN": "二维码生成",
+    "en_US": "QR Code Generator",
+    "ja_JP": "QRコード生成"
+  },
+  "domains": null,
+  "formItems": [
+    {
+      "key": "text",
+      "label": {
+        "zh_CN": "文本内容",
+        "en_US": "Text Content",
+        "ja_JP": "テキスト内容"
+      },
+      "component": "FieldSelect",
+      "supportType": [
+        "Text"
+      ],
+      "required": true
+    }
+  ],
+  "result": {
+    "kind": "object",
+    "properties": [
+      {
+        "key": "qr_image_url",
+        "type": "Text",
+        "label": {
+          "zh_CN": "二维码图片URL",
+          "en_US": "QR Code Image URL",
+          "ja_JP": "QRコード画像URL"
+        },
+        "primary": true,
+        "template": "https://api.qrserver.com/v1/create-qr-code/?size=300x300\u0026data={text}"
+      },
+      {
+        "key": "_id",
+        "type": "Text",
+        "label": {
+          "zh_CN": ""
+        },
+        "hidden": true,
+        "groupByKey": true,
+        "expr": "rand()"
+      }
+    ]
+  },
+  "execute": {
+    "url": "",
+    "method": ""
+  }
+}
