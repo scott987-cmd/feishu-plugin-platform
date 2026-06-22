@@ -221,6 +221,12 @@ func RenderIndexTS(f FieldShortcut) (string, error) {
 			init = fmt.Sprintf("{ method: %s, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ %s }) }",
 				jsStr(f.Execute.Method), strings.Join(parts, ", "))
 		}
+		if len(f.Execute.BodyJSON) > 0 {
+			if bj, err := renderBodyJSON(f.Execute.BodyJSON); err == nil {
+				init = fmt.Sprintf("{ method: %s, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(%s) }",
+					jsStr(f.Execute.Method), bj)
+			}
+		}
 		authArg := ""
 		if f.Auth != nil {
 			authArg = ", " + jsStr(f.Auth.ID) // basekit runtime injects the user's credential

@@ -223,6 +223,40 @@ func TestExprFunctions(t *testing.T) {
 	}
 }
 
+func TestBodyJSONNested(t *testing.T) {
+	f := loadExchangeRate(t)
+	f.Domains = []string{"api.deepseek.com"}
+	f.FormItems = []shortcut.FormItem{{Key: "text", Label: shortcut.I18n{ZhCN: "文本"}, Component: "FieldSelect", SupportType: []string{"Text"}, Required: true}}
+	f.Result.Properties = []shortcut.ResultProp{{Key: "out", Type: "Text", Primary: true, Expr: "res.choices.0.message.content"}}
+	f.Execute = shortcut.Execute{
+		URL: "https://api.deepseek.com/chat/completions", Method: "POST",
+		BodyJSON: []byte(`{"model":"deepseek-chat","messages":[{"role":"user","content":"{text}"}]}`),
+	}
+	if err := f.Validate(); err != nil {
+		t.Fatalf("nested bodyJson should validate, got: %v", err)
+	}
+	ts, err := shortcut.RenderIndexTS(f)
+	if err != nil {
+		t.Fatalf("render failed: %v", err)
+	}
+	// nested literal with placeholder→${inp.text}; keys sorted; array index path
+	for _, w := range []string{
+		"body: JSON.stringify({ ",
+		"\"messages\": [{ \"content\": `${inp.text}`, \"role\": \"user\" }]",
+		"\"model\": \"deepseek-chat\"",
+		"out: res?.choices?.[0]?.message?.content,",
+	} {
+		if !strings.Contains(ts, w) {
+			t.Errorf("bodyJson render missing:\n  %s\n--- got ---\n%s", w, ts)
+		}
+	}
+	// placeholder referencing an unknown input must be rejected
+	f.Execute.BodyJSON = []byte(`{"messages":[{"content":"{nope}"}]}`)
+	if err := f.Validate(); err == nil {
+		t.Error("bodyJson with unknown placeholder should fail validation")
+	}
+}
+
 func TestRejections(t *testing.T) {
 	base := loadExchangeRate(t)
 

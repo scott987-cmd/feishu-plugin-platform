@@ -30,7 +30,7 @@ const (
 		"(3) `expr` uses ONLY this grammar — no other code: atoms = a number, 'single-quoted string', rand(), in.<formItemKey>, res.<dotted.json.path>; operators + - * / % ( ) , ; and these functions: concat(a,b,…), upper(s), lower(s), trim(s), substr(s,start,len), slice(s,a,b), replace(s,from,to), len(s), urlencode(s), round(n,d). Examples: `in.amount * res.rates.USD` · `trim(in.text)` · `substr(in.idcard, 6, 8)` · `concat(in.last, in.first)` · `upper(in.code)`. " +
 		"Examples: `in.account * res.rates.USD` , `res.data.title` , `rand()`. " +
 		"(4) Include one hidden Text property with isGroupByKey via groupByKey=true and expr `rand()` as a stable row id. " +
-		"(5) execute.url may contain {formItemKey} placeholders. For a POST API, set method=POST and execute.body (JSON sent as application/json); a body value of exactly \"{formKey}\" injects that input, anything else is a literal. " +
+		"(5) execute.url may contain {formItemKey} placeholders. For a POST API, set method=POST. Flat body → execute.body (field→value, \"{formKey}\" injects input). NESTED/structured body (AI chat completions etc., e.g. messages array) → execute.bodyJson with the full JSON shape, putting \"{formKey}\" where an input goes (e.g. content). For AI APIs that need a Bearer key, also add auth HeaderBearerToken. " +
 		"(5b) NO-FETCH plugins (omit `execute` and `domains` entirely): two sub-cases. " +
 		"(i) `template` is ONLY for inserting inputs VERBATIM into literal text — URL construction (QR/chart/image generators like api.qrserver.com) or raw concatenation, e.g. template \"https://api.qrserver.com/v1/create-qr-code/?data={text}\". A template does NOT transform its inputs. " +
 		"(ii) For any TRANSFORMATION of the input — uppercase, lowercase, trim, substring, replace, length, etc. — DO NOT use a template; use `expr` with the matching function, e.g. expr upper(in.text) / trim(in.text) / substr(in.idcard, 6, 8) / concat(in.last, in.first). Never invent res.<path> for a no-fetch plugin. " +
@@ -125,8 +125,12 @@ func fieldShortcutSchema() map[string]any {
 					"method": enum(shortcut.ValidMethods),
 					"body": map[string]any{
 						"type":                 "object",
-						"description":          "POST only: JSON body, field→value. A value of exactly \"{formKey}\" injects that input; anything else is a literal string.",
+						"description":          "POST only, FLAT body: field→value. A value of exactly \"{formKey}\" injects that input; anything else is a literal string. For nested bodies use bodyJson instead.",
 						"additionalProperties": map[string]any{"type": "string"},
+					},
+					"bodyJson": map[string]any{
+						"type":        "object",
+						"description": "POST only, STRUCTURED/NESTED body (use for AI chat APIs etc., e.g. {\"model\":\"deepseek-chat\",\"messages\":[{\"role\":\"user\",\"content\":\"…{text}…\"}]}). Give the full JSON shape; string values may contain {inputKey} placeholders. Use this instead of `body` when the body is not flat.",
 					},
 				},
 			},

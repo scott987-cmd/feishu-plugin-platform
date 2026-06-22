@@ -16,6 +16,7 @@
 package shortcut
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -96,6 +97,10 @@ type ResultProp struct {
 type Execute struct {
 	URL    string `json:"url"`    // may contain {formKey} placeholders
 	Method string `json:"method"` // GET | POST
+	// BodyJSON is a structured/nested POST body (e.g. AI chat: {"model":…,
+	// "messages":[{"role":"user","content":"…{text}…"}]}). String values may hold
+	// {formKey} placeholders. Use this instead of Body for non-flat bodies.
+	BodyJSON json.RawMessage `json:"bodyJson,omitempty"`
 	// Body is the POST JSON body: field name → value. A value that is exactly
 	// "{formKey}" injects that input; anything else is a literal string. Only
 	// valid when Method is POST. Sent as application/json.
@@ -269,6 +274,17 @@ func (f FieldShortcut) Validate() error {
 			if ref := bodyRef(v); ref != "" && !formKeys[ref] {
 				errs = append(errs, fmt.Errorf("execute.body[%s] references unknown form item %q", k, ref))
 			}
+		}
+	}
+	if len(f.Execute.BodyJSON) > 0 {
+		if f.Execute.Method != "POST" {
+			errs = append(errs, errors.New("execute.bodyJson is only valid when method is POST"))
+		}
+		if len(f.Execute.Body) > 0 {
+			errs = append(errs, errors.New("set either execute.body or execute.bodyJson, not both"))
+		}
+		if err := validateBodyJSON(f.Execute.BodyJSON, formKeys); err != nil {
+			errs = append(errs, fmt.Errorf("execute.bodyJson: %w", err))
 		}
 	}
 

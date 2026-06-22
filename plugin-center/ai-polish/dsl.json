@@ -1,0 +1,72 @@
+{
+  "id": "deepseek-polish",
+  "title": {
+    "zh_CN": "DeepSeek 文本润色",
+    "en_US": "DeepSeek Text Polish",
+    "ja_JP": "DeepSeek テキストリライト"
+  },
+  "domains": [
+    "api.deepseek.com"
+  ],
+  "auth": {
+    "id": "apiKey",
+    "type": "HeaderBearerToken",
+    "label": "DeepSeek API Key",
+    "platform": "DeepSeek",
+    "instructionsUrl": "https://platform.deepseek.com/api_keys"
+  },
+  "formItems": [
+    {
+      "key": "text",
+      "label": {
+        "zh_CN": "待润色文本",
+        "en_US": "Text to Polish",
+        "ja_JP": "リライトするテキスト"
+      },
+      "component": "FieldSelect",
+      "supportType": [
+        "Text"
+      ],
+      "required": true
+    }
+  ],
+  "result": {
+    "kind": "object",
+    "properties": [
+      {
+        "key": "polished",
+        "type": "Text",
+        "label": {
+          "zh_CN": "润色结果",
+          "en_US": "Polished Text",
+          "ja_JP": "リライト結果"
+        },
+        "primary": true,
+        "expr": "res.choices.0.message.content"
+      },
+      {
+        "key": "_id",
+        "type": "Text",
+        "label": {
+          "zh_CN": ""
+        },
+        "hidden": true,
+        "groupByKey": true,
+        "expr": "rand()"
+      }
+    ]
+  },
+  "execute": {
+    "url": "https://api.deepseek.com/chat/completions",
+    "method": "POST",
+    "bodyJson": {
+      "model": "deepseek-chat",
+      "messages": [
+        {
+          "role": "user",
+          "content": "{text}"
+        }
+      ]
+    }
+  }
+}
