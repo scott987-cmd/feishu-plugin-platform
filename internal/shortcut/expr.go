@@ -21,24 +21,49 @@ var (
 	placeholder = regexp.MustCompile(`\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 )
 
-// validateExpr rejects anything outside the grammar and checks that every
-// in.<key> references a declared form item.
+// exprFuncs is the allowlist of helper functions usable in expressions. Each is
+// rendered as a small pure JS helper (see exprHelperDefs) — `name(` becomes
+// `_name(`. No other function names are permitted.
+var exprFuncs = []string{"concat", "upper", "lower", "trim", "substr", "slice", "replace", "len", "urlencode", "round"}
+
+func isExprFunc(name string) bool {
+	for _, f := range exprFuncs {
+		if f == name {
+			return true
+		}
+	}
+	return false
+}
+
+// strLitRe matches a single-quoted string literal with safe content (no quote,
+// backtick, backslash or $ inside) — so literals can never inject code.
+var strLitRe = regexp.MustCompile(`'[^'` + "`" + `\\$]*'`)
+
+// validateExpr rejects anything outside the grammar: numbers, single-quoted
+// string literals, in.<key>, res.<path>, rand(), the allowlisted functions, and
+// the operators + - * / % ( ) , — nothing else.
 func validateExpr(expr string, formKeys map[string]bool) error {
 	e := strings.TrimSpace(expr)
 	if e == "" {
 		return errors.New("empty")
 	}
-	for _, bad := range []string{";", "=", "[", "]", "{", "}", "$", "`", "\"", "'", "\\", "//", "/*", "?", ":", ",", "&", "|", "!", "<", ">"} {
-		if strings.Contains(e, bad) {
+	// Mask safe string literals to "0" so they don't interfere with scanning;
+	// a leftover quote means an unbalanced/unsafe literal.
+	masked := strLitRe.ReplaceAllString(e, "0")
+	if strings.Contains(masked, "'") {
+		return errors.New("unbalanced or unsafe string literal (use 'plain text' only)")
+	}
+	for _, bad := range []string{";", "=", "[", "]", "{", "}", "$", "`", "\"", "\\", "//", "/*", ":", "?", "&", "|", "!", "<", ">"} {
+		if strings.Contains(masked, bad) {
 			return fmt.Errorf("contains forbidden token %q", bad)
 		}
 	}
-	if strings.Contains(e, "rand") && !strings.Contains(e, "rand()") {
+	if strings.Contains(masked, "rand") && !strings.Contains(masked, "rand()") {
 		return errors.New("rand must be used as rand()")
 	}
-	for _, id := range exprIdentRe.FindAllString(e, -1) {
+	for _, id := range exprIdentRe.FindAllString(masked, -1) {
 		switch {
-		case id == "rand":
+		case id == "rand", isExprFunc(id):
 		case strings.HasPrefix(id, "in."):
 			seg := strings.Split(strings.TrimPrefix(id, "in."), ".")[0]
 			if !formKeys[seg] {
@@ -47,14 +72,14 @@ func validateExpr(expr string, formKeys map[string]bool) error {
 		case strings.HasPrefix(id, "res."):
 			// any dotted response path is allowed
 		default:
-			return fmt.Errorf("identifier %q not allowed (use in.<key>, res.<path>, or rand())", id)
+			return fmt.Errorf("identifier %q not allowed (use in.<key>, res.<path>, rand(), or %v)", id, exprFuncs)
 		}
 	}
 	// Whatever remains after stripping idents and numbers must be operators only.
-	stripped := exprIdentRe.ReplaceAllString(e, "")
+	stripped := exprIdentRe.ReplaceAllString(masked, "")
 	stripped = exprNumRe.ReplaceAllString(stripped, "")
-	if exprOpsRe.MatchString(stripped) {
-		return errors.New("contains characters outside the allowed grammar (+ - * / ( ) numbers in.<key> res.<path> rand())")
+	if regexp.MustCompile(`[^\s+\-*/%(),]`).MatchString(stripped) {
+		return errors.New("contains characters outside the allowed grammar (+ - * / % ( ) , numbers 'strings' in.<key> res.<path> rand() functions)")
 	}
 	return nil
 }
@@ -66,22 +91,65 @@ func validateExpr(expr string, formKeys map[string]bool) error {
 //   res.list.0.x  -> res?.list?.[0]?.x      (numeric segments are array indices)
 func translateExpr(expr string) string {
 	e := strings.TrimSpace(expr)
-	e = strings.ReplaceAll(e, "rand()", "String(Math.random())")
-	e = regexp.MustCompile(`\bin\.([A-Za-z_][A-Za-z0-9_]*)`).ReplaceAllString(e, "inp.$1")
-	e = regexp.MustCompile(`\bres((?:\.[A-Za-z0-9_]+)+)`).ReplaceAllStringFunc(e, func(m string) string {
-		segs := strings.Split(strings.TrimPrefix(m, "res"), ".")[1:] // drop leading ""
+	// Transform only non-literal segments so 'string literals' pass through verbatim.
+	var out strings.Builder
+	last := 0
+	for _, loc := range strLitRe.FindAllStringIndex(e, -1) {
+		out.WriteString(transformSeg(e[last:loc[0]]))
+		out.WriteString(e[loc[0]:loc[1]])
+		last = loc[1]
+	}
+	out.WriteString(transformSeg(e[last:]))
+	return out.String()
+}
+
+func transformSeg(s string) string {
+	s = strings.ReplaceAll(s, "rand()", "String(Math.random())")
+	for _, fn := range exprFuncs { // allowlisted function name -> pure JS helper call
+		s = regexp.MustCompile(`\b` + fn + `\(`).ReplaceAllString(s, "_"+fn+"(")
+	}
+	s = regexp.MustCompile(`\bin\.([A-Za-z_][A-Za-z0-9_]*)`).ReplaceAllString(s, "inp.$1")
+	s = regexp.MustCompile(`\bres((?:\.[A-Za-z0-9_]+)+)`).ReplaceAllStringFunc(s, func(m string) string {
+		segs := strings.Split(strings.TrimPrefix(m, "res"), ".")[1:]
 		var b strings.Builder
 		b.WriteString("res")
-		for _, s := range segs {
-			if isAllDigits(s) {
-				b.WriteString("?.[" + s + "]")
+		for _, x := range segs {
+			if isAllDigits(x) {
+				b.WriteString("?.[" + x + "]")
 			} else {
-				b.WriteString("?." + s)
+				b.WriteString("?." + x)
 			}
 		}
 		return b.String()
 	})
-	return e
+	return s
+}
+
+// exprHelperDefs are the pure JS implementations of the allowlisted functions.
+var exprHelperDefs = map[string]string{
+	"concat":    "const _concat = (...a: any[]) => a.map(String).join('');",
+	"upper":     "const _upper = (s: any) => String(s).toUpperCase();",
+	"lower":     "const _lower = (s: any) => String(s).toLowerCase();",
+	"trim":      "const _trim = (s: any) => String(s).trim();",
+	"substr":    "const _substr = (s: any, a: any, l: any) => String(s).slice(Number(a), Number(a) + Number(l));",
+	"slice":     "const _slice = (s: any, a: any, b: any) => String(s).slice(Number(a), Number(b));",
+	"replace":   "const _replace = (s: any, a: any, b: any) => String(s).split(String(a)).join(String(b));",
+	"len":       "const _len = (s: any) => String(s).length;",
+	"urlencode": "const _urlencode = (s: any) => encodeURIComponent(String(s));",
+	"round":     "const _round = (n: any, d: any = 0) => Number(Number(n).toFixed(Number(d)));",
+}
+
+// emitExprHelpers writes (indented) the helper defs actually referenced by vals.
+func emitExprHelpers(b *strings.Builder, indent string, vals []string) {
+	for _, fn := range exprFuncs {
+		needle := "_" + fn + "("
+		for _, v := range vals {
+			if strings.Contains(v, needle) {
+				b.WriteString(indent + exprHelperDefs[fn] + "\n")
+				break
+			}
+		}
+	}
 }
 
 func isAllDigits(s string) bool {

@@ -1,0 +1,54 @@
+{
+  "id": "idcard-birthdate",
+  "title": {
+    "zh_CN": "身份证提取出生日期",
+    "en_US": "Extract Birthdate from ID Card",
+    "ja_JP": "身分証から生年月日を抽出"
+  },
+  "domains": null,
+  "formItems": [
+    {
+      "key": "idcard",
+      "label": {
+        "zh_CN": "身份证号",
+        "en_US": "ID Card Number",
+        "ja_JP": "身分証番号"
+      },
+      "component": "FieldSelect",
+      "supportType": [
+        "Text"
+      ],
+      "required": true
+    }
+  ],
+  "result": {
+    "kind": "object",
+    "properties": [
+      {
+        "key": "_groupId",
+        "type": "Text",
+        "label": {
+          "zh_CN": ""
+        },
+        "hidden": true,
+        "groupByKey": true,
+        "expr": "rand()"
+      },
+      {
+        "key": "birthdate",
+        "type": "Text",
+        "label": {
+          "zh_CN": "出生日期",
+          "en_US": "Birth Date",
+          "ja_JP": "生年月日"
+        },
+        "primary": true,
+        "expr": "substr(in.idcard, 6, 8)"
+      }
+    ]
+  },
+  "execute": {
+    "url": "",
+    "method": ""
+  }
+}

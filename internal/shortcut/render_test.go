@@ -165,6 +165,64 @@ func TestPostBodyRejectedOnGet(t *testing.T) {
 	}
 }
 
+func TestComputeOnlyTemplate(t *testing.T) {
+	// No execute/domains → compute-only; a template output renders as a JS template literal.
+	f := shortcut.FieldShortcut{
+		ID: "qr", Title: shortcut.I18n{ZhCN: "二维码"},
+		FormItems: []shortcut.FormItem{{Key: "text", Label: shortcut.I18n{ZhCN: "文本"}, Component: "FieldSelect", SupportType: []string{"Text"}, Required: true}},
+		Result: shortcut.Result{Kind: "object", Properties: []shortcut.ResultProp{
+			{Key: "url", Type: "Text", Primary: true, Template: "https://api.qrserver.com/v1/create-qr-code/?data={text}"},
+		}},
+	}
+	if err := f.Validate(); err != nil {
+		t.Fatalf("compute-only template should validate, got: %v", err)
+	}
+	ts, err := shortcut.RenderIndexTS(f)
+	if err != nil {
+		t.Fatalf("render failed: %v", err)
+	}
+	if strings.Contains(ts, "addDomainList") {
+		t.Error("compute-only should not emit addDomainList")
+	}
+	if strings.Contains(ts, "await fetch") {
+		t.Error("compute-only should not fetch")
+	}
+	if !strings.Contains(ts, "url: `https://api.qrserver.com/v1/create-qr-code/?data=${inp.text}`") {
+		t.Errorf("template not rendered as literal:\n%s", ts)
+	}
+}
+
+func TestExprFunctions(t *testing.T) {
+	f := loadExchangeRate(t)
+	f.Domains = nil
+	f.Execute = shortcut.Execute{} // compute-only
+	f.Result.Properties = []shortcut.ResultProp{
+		{Key: "out", Type: "Text", Primary: true, Expr: "upper(trim(in.account))"},
+	}
+	if err := f.Validate(); err != nil {
+		t.Fatalf("function expr should validate, got: %v", err)
+	}
+	ts, _ := shortcut.RenderIndexTS(f)
+	for _, w := range []string{
+		"const _upper =", "const _trim =", // only used helpers emitted
+		"out: _upper(_trim(inp.account)),",
+	} {
+		if !strings.Contains(ts, w) {
+			t.Errorf("function render missing: %s", w)
+		}
+	}
+	// res.* must be rejected in compute-only mode
+	f.Result.Properties[0].Expr = "res.foo"
+	if err := f.Validate(); err == nil {
+		t.Error("res.* should be rejected without a fetch")
+	}
+	// arbitrary code still rejected
+	f.Result.Properties[0].Expr = "process.exit(1)"
+	if err := f.Validate(); err == nil {
+		t.Error("arbitrary identifier should be rejected")
+	}
+}
+
 func TestRejections(t *testing.T) {
 	base := loadExchangeRate(t)
 

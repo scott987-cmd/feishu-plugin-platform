@@ -1,0 +1,53 @@
+{
+  "id": "trim-text",
+  "title": {
+    "zh_CN": "去掉首尾空格",
+    "en_US": "Trim Spaces",
+    "ja_JP": "前後スペース削除"
+  },
+  "domains": null,
+  "formItems": [
+    {
+      "key": "text",
+      "label": {
+        "zh_CN": "文本字段",
+        "en_US": "Text Field"
+      },
+      "component": "FieldSelect",
+      "supportType": [
+        "Text"
+      ],
+      "required": true
+    }
+  ],
+  "result": {
+    "kind": "object",
+    "properties": [
+      {
+        "key": "_groupKey",
+        "type": "Text",
+        "label": {
+          "zh_CN": ""
+        },
+        "hidden": true,
+        "groupByKey": true,
+        "expr": "rand()"
+      },
+      {
+        "key": "trimmed",
+        "type": "Text",
+        "label": {
+          "zh_CN": "清理后的文本",
+          "en_US": "Trimmed Text",
+          "ja_JP": "トリム後"
+        },
+        "primary": true,
+        "expr": "trim(in.text)"
+      }
+    ]
+  },
+  "execute": {
+    "url": "",
+    "method": ""
+  }
+}

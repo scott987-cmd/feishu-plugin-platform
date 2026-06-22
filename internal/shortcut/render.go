@@ -197,6 +197,12 @@ func RenderIndexTS(f FieldShortcut) (string, error) {
 	}
 	w("  execute: async (formItemParams: { %s }, context) => {\n", strings.Join(paramType, "; "))
 	w("    const inp: Record<string, any> = formItemParams;\n")
+	// Pre-render output values, then emit only the expression helpers they use.
+	propVals := make([]string, len(f.Result.Properties))
+	for i, p := range f.Result.Properties {
+		propVals[i] = renderPropValue(p)
+	}
+	emitExprHelpers(&b, "    ", propVals)
 	b.WriteString(executeHelpers)
 	w("    try {\n")
 	if strings.TrimSpace(f.Execute.URL) != "" {
@@ -223,8 +229,8 @@ func RenderIndexTS(f FieldShortcut) (string, error) {
 	}
 	// else: compute-only — no outbound request; outputs come from inputs/templates.
 	w("      return {\n        code: FieldCode.Success,\n        data: {\n")
-	for _, p := range f.Result.Properties {
-		w("          %s: %s,\n", p.Key, renderPropValue(p))
+	for i, p := range f.Result.Properties {
+		w("          %s: %s,\n", p.Key, propVals[i])
 	}
 	w("        },\n      };\n")
 	w("    } catch (e) {\n")

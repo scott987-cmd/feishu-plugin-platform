@@ -25,7 +25,7 @@ const (
 		"and returns a `result` object whose fields downstream automation steps can consume. " +
 		"RULES: (1) `domains` MUST list every external host hit; execute.url's host MUST be one of them. " +
 		"(2) each `inputs` item has key (ascii), a plain-string label, and required. (3) each `result` item has key (ascii), a plain-string label, a type, and `expr`. " +
-		"(4) `expr` uses ONLY: a number, rand(), in.<inputKey>, or res.<dotted.json.path>, with + - * / ( ). Example: `in.amount * res.rates.USD`. " +
+		"(4) `expr` uses ONLY: a number, 'single-quoted string', rand(), in.<inputKey>, res.<dotted.json.path>, with + - * / % ( ) , and functions concat/upper/lower/trim/substr/slice/replace/len/urlencode/round. Example: `in.amount * res.rates.USD` · `trim(in.text)`. " +
 		"(5) For a POST API set method=POST and execute.body (a value of exactly \"{inputKey}\" injects that input, else literal). " +
 		"(6) If the API needs a key/token, add `auth` { type:'APIKey', label } (the user enters it; the runtime injects it). Omit for open APIs. " +
 		"Reuse names from the request; pick sensible result types. id is a lowercase ascii slug."

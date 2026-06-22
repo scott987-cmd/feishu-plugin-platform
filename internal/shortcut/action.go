@@ -241,6 +241,12 @@ func RenderActionTS(a Action) (string, error) {
 	w("  ],\n")
 
 	w("  execute: async (args: Record<string, any>, context) => {\n")
+	// Pre-render output values; emit only the expression helpers they use.
+	actVals := make([]string, len(a.Result))
+	for i, p := range a.Result {
+		actVals[i] = translateActionExpr(p.Expr)
+	}
+	emitExprHelpers(&b, "    ", actVals)
 	b.WriteString(actionHelpers)
 	w("    try {\n")
 	initObj := fmt.Sprintf("{ method: %s }", jsStr(a.Execute.Method))
@@ -266,8 +272,8 @@ func RenderActionTS(a Action) (string, error) {
 	actionURL := strings.ReplaceAll(renderURLTemplate(a.Execute.URL), "${inp.", "${args.")
 	w("      const res: any = await fetch(`%s`, %s);\n", actionURL, initObj)
 	w("      return {\n")
-	for _, p := range a.Result {
-		w("        %s: %s,\n", p.Key, translateActionExpr(p.Expr))
+	for i, p := range a.Result {
+		w("        %s: %s,\n", p.Key, actVals[i])
 	}
 	w("      };\n")
 	w("    } catch (e) {\n")

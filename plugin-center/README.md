@@ -17,11 +17,16 @@ API** via the basekit `testField` / `testAction` harness — not just compiled.
 | [`ip-geo`](ip-geo/) | field · GET→JSON | IP 地址查地理位置,输出国家/城市/运营商(ip-api) | `8.8.8.8` → `United States / Ashburn / Google LLC` |
 | [`text-to-qr`](text-to-qr/) | field · compute (URL-as-result, no fetch) | 文本转二维码图片 URL(api.qrserver.com) | `https://feishu.cn` → `…/create-qr-code/?size=300x300&data=https://feishu.cn` |
 | [`fullname`](fullname/) | field · compute (pure local, no fetch) | 姓 + 名 拼接成全名 | concat verified |
+| [`text-trim`](text-trim/) | field · compute · `trim()` | 去掉文本首尾空格 | `"  hello world  "` → `"hello world"` |
+| [`idcard-birth`](idcard-birth/) | field · compute · `substr()` | 从身份证号截取出生日期(第7起8位) | `11010119900307123X` → `19900307` |
+| [`to-upper`](to-upper/) | field · compute · `upper()` | 文本转全大写 | `"feishu"` → `"FEISHU"` |
 | [`fx-action`](fx-action/) | **automation action** · GET→JSON | 自动化:人民币金额按实时汇率换算,输出美元金额+汇率 | `{usd_amount: 14.7, exchange_rate: 0.147}` (100 CNY) · **also uploaded + published + run in a real Base automation** |
 
 Coverage of generator capabilities demonstrated here: **GET→JSON mapping**, **POST + JSON body**, **4 auth
 types** (Bearer / QueryParamToken / CustomHeaderToken / Basic — see the generator), **compute-only / "the URL is
-the result"** (no outbound request), and the **automation (`addAction`) track**.
+the result"** (no outbound request), **text-transformation functions** in expressions
+(`trim` / `upper` / `lower` / `substr` / `slice` / `replace` / `concat` / `len` / `urlencode` / `round`, all
+rendered as audited pure-JS helpers — never `eval`), and the **automation (`addAction`) track**.
 
 ## Deploy a plugin into your Feishu
 
