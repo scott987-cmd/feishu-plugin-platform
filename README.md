@@ -11,6 +11,22 @@ A natural-language → basekit plugin generator for organizations that run **pri
 
 ---
 
+## 演示 · Live demo
+
+A real, unedited screen recording — type one sentence, the model generates **and validates**, you get an auditable `src/index.ts` plus a one-click project download. The clip also shows switching to **自动化 (addAction)** and generating an automation action.
+
+![一句话生成可审计的飞书 basekit 插件 · 实机录屏](docs/assets/demo.gif)
+
+| ① 用一句话描述需求 | ② 生成结果概览（输入 / 出网白名单 / 鉴权 / 输出列） |
+|---|---|
+| ![输入自然语言需求](docs/assets/screenshots/02-input.png) | ![生成结果概览](docs/assets/screenshots/03-field-result.png) |
+| **③ 可逐行审计的源码 + 一键下载工程** | **④ 切到「自动化」生成 addAction 动作** |
+| ![可审计的 src/index.ts](docs/assets/screenshots/04-field-code.png) | ![自动化动作 register.ts](docs/assets/screenshots/05-action-result.png) |
+
+> 完整图文走查见 **[`docs/index.html`](docs/index.html)**（含上面的录屏与逐步截图，可作为发给客户的使用指南；用 GitHub Pages 指向 `/docs` 即可在线访问）。
+
+---
+
 ## The problem it solves
 
 A private Feishu deployment ships with the basekit plugin capability but, by design, **no public marketplace** — there is nowhere to "install" a community field shortcut or automation. Building one yourself means hiring someone who knows the basekit SDK. Most of these orgs (信创 / 政企 / state-owned enterprises) have neither.

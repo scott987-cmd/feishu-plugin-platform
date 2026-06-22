@@ -281,6 +281,34 @@
     font-size: 13.5px; color: var(--ink-3);
   }
   .foot-bottom .lic { font-family: var(--mono); }
+
+  /* ---- live demo (screenshots + recording) ---- */
+  .demo-video {
+    margin: 30px 0 8px; border-radius: var(--radius); overflow: hidden;
+    box-shadow: var(--shadow-lg); border: 1px solid var(--line); background: var(--code-bg);
+  }
+  .demo-video video { display: block; width: 100%; height: auto; }
+  .demo-video figcaption {
+    font-size: 13.5px; color: var(--ink-3); padding: 13px 18px;
+    background: var(--bg); border-top: 1px solid var(--line);
+  }
+  .demo-video figcaption b { color: var(--ink-2); }
+  .steps { display: grid; grid-template-columns: repeat(2, 1fr); gap: 22px; margin-top: 30px; }
+  .step { margin: 0; }
+  .step .cap {
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 600; font-size: 14.5px; color: var(--ink-2); margin-bottom: 11px;
+  }
+  .step .cap .n {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 25px; height: 25px; border-radius: 50%; background: var(--brand);
+    color: #fff; font-size: 13px; font-weight: 700; flex: none;
+  }
+  .step img {
+    display: block; width: 100%; height: auto;
+    border-radius: var(--radius-sm); border: 1px solid var(--line); box-shadow: var(--shadow);
+  }
+  @media (max-width: 760px) { .steps { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -295,6 +323,7 @@
       飞书多维表格插件生成平台
     </div>
     <nav class="nav-links">
+      <a href="#demo">使用演示</a>
       <a href="#audience">为谁打造</a>
       <a href="#generators">两套生成器</a>
       <a href="#architecture">架构</a>
@@ -315,8 +344,8 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.2.8-.5v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.4-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.4 11.4 0 0 1 6 0C17.3 4.6 18.3 5 18.3 5c.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.6.8.5 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5Z"/></svg>
         在 GitHub 上查看
       </a>
-      <a class="btn btn-ghost" href="#">
-        快速开始
+      <a class="btn btn-ghost" href="#demo">
+        看使用演示
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
       </a>
     </div>
@@ -324,6 +353,39 @@
       <span class="pill"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 生成物=<b>人类可读源码</b>，可自行审计后送审</span>
       <span class="pill"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 三道编译期护栏，<b>绝不 eval</b></span>
       <span class="pill"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 端到端已真上传飞书并上线运行</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DEMO ============ -->
+<section id="demo" style="background:var(--bg-tint)">
+  <div class="wrap">
+    <span class="eyebrow"><span class="dot"></span>使用演示 · See it in action</span>
+    <h2 class="section-title">一句话，半分钟拿到可上传的插件</h2>
+    <p class="section-lead">下面是平台的<b>真实生成全过程</b>（实机录屏，仅做加速展示）：输入自然语言 → 调用模型生成并校验 → 产出带「出网域名白名单 / 鉴权 / 输出列映射」的可审计 <code>src/index.ts</code>，再一键下载工程 zip。<span class="en">Real screen recording — not a mockup.</span></p>
+
+    <figure class="demo-video">
+      <video src="assets/demo.mp4" poster="assets/screenshots/03-field-result.png" autoplay muted loop playsinline controls preload="metadata"></video>
+      <figcaption>真实录屏：从「<b>人民币按实时汇率换算美元</b>」一句话，到可审计的 TypeScript 工程；并演示切换到<b>自动化（addAction）</b>再生成一个动作。</figcaption>
+    </figure>
+
+    <div class="steps">
+      <figure class="step">
+        <div class="cap"><span class="n">1</span> 用一句话描述需求</div>
+        <img src="assets/screenshots/02-input.png" alt="在输入框用自然语言描述需求" loading="lazy"/>
+      </figure>
+      <figure class="step">
+        <div class="cap"><span class="n">2</span> 自动生成 + 校验，给出结构化概览</div>
+        <img src="assets/screenshots/03-field-result.png" alt="生成结果概览：输入字段、出网域名白名单、需要的凭证、输出列映射" loading="lazy"/>
+      </figure>
+      <figure class="step">
+        <div class="cap"><span class="n">3</span> 产出可逐行审计的源码，一键下载工程</div>
+        <img src="assets/screenshots/04-field-code.png" alt="可审计的 src/index.ts 源码与「下载工程 / 下载 DSL」按钮" loading="lazy"/>
+      </figure>
+      <figure class="step">
+        <div class="cap"><span class="n">4</span> 切到「自动化」，同样一句话生成动作</div>
+        <img src="assets/screenshots/05-action-result.png" alt="自动化动作（addAction）生成结果与 register.ts 源码" loading="lazy"/>
+      </figure>
     </div>
   </div>
 </section>
@@ -648,7 +710,7 @@ basekit.<span class="f">addField</span>({
         <div class="foot-col">
           <h5>项目</h5>
           <a href="#">GitHub 仓库</a>
-          <a href="#">快速开始</a>
+          <a href="#demo">使用演示</a>
           <a href="#architecture">架构说明</a>
           <a href="#security">安全模型</a>
         </div>
