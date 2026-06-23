@@ -1,0 +1,97 @@
+# Self-hosted execute-runner: the FaaS replacement for private-deployment Feishu
+# (no basekit FaaS). Interprets a field-shortcut DSL at request time — fetch
+# external APIs (per-plugin domain allowlist + SSRF guard) and map the response.
+# Internal only: reached by the api (call-chain B), never the public ingress.
+# See EXECUTE_RUNTIME.md.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: execute-runner
+  namespace: feishu-plugin-platform
+  labels: { app: execute-runner }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: execute-runner }
+  template:
+    metadata:
+      labels: { app: execute-runner }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: execute-runner
+          image: feishu-plugin-platform/execute-runner:0.1.0
+          # For prod, pin by digest (image: ...@sha256:<digest>).
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 65532 # distroless nonroot uid
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          ports:
+            - containerPort: 8095
+          env:
+            - name: PORT
+              value: "8095"
+            # Bearer the api must present (call-chain B). Reuses the platform secret.
+            - name: PLATFORM_API_TOKEN
+              valueFrom: { secretKeyRef: { name: platform-secrets, key: EXECUTE_RUNNER_TOKEN } }
+            # SSRF guard ON in production (refuse private/loopback targets). The
+            # per-plugin domain allowlist is always enforced regardless.
+            - name: EXECUTE_ALLOW_PRIVATE
+              value: "false"
+            - name: EXECUTE_TIMEOUT_SECONDS
+              value: "10"
+            - name: EXECUTE_MAX_BODY_BYTES
+              value: "1048576"
+            # If your cluster routes egress through an allowlist proxy, set
+            # HTTP_PROXY/HTTPS_PROXY here; the SSRF guard allows dialing the proxy
+            # while still blocking other private targets.
+          readinessProbe:
+            httpGet: { path: /readyz, port: 8095 }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8095 }
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          resources:
+            requests: { cpu: "100m", memory: "64Mi" }
+            limits: { cpu: "500m", memory: "192Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: execute-runner
+  namespace: feishu-plugin-platform
+spec:
+  selector: { app: execute-runner }
+  ports:
+    - port: 80
+      targetPort: 8095
+---
+# Burst-friendly: execute calls are spiky. (Needs metrics-server for CPU HPA.)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: execute-runner
+  namespace: feishu-plugin-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: execute-runner
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

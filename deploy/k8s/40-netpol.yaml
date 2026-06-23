@@ -27,6 +27,51 @@ spec:
         - protocol: TCP
           port: 8090
 ---
+# execute-runner is internal (FaaS replacement): only the api may reach it
+# (call-chain B). It is never exposed via the public ingress.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-to-execute-runner
+  namespace: feishu-plugin-platform
+spec:
+  podSelector:
+    matchLabels: { app: execute-runner }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app: api }
+      ports:
+        - protocol: TCP
+          port: 8095
+---
+# execute-runner egress allowlist: it must reach external plugin APIs (it is the
+# single self-hosted egress point), so it needs DNS + outbound 443/80. For a
+# hard per-domain allowlist (red line: 不引入新出网域名) route egress through a
+# forward proxy (set HTTP_PROXY in 15-execute-runner.yaml) or use a CNI that
+# supports egress FQDN policy (Calico/Cilium). DNS + ports below are the floor.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: execute-runner-egress
+  namespace: feishu-plugin-platform
+spec:
+  podSelector:
+    matchLabels: { app: execute-runner }
+  policyTypes: ["Egress"]
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
+---
 # API is the public entry (behind the ingress controller). Source is scoped to
 # the ingress controller's namespace — change the label to match your controller
 # (e.g. ingress-nginx / kube-system) if different.

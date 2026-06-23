@@ -26,6 +26,9 @@ func main() {
 		AllowedOrigin: getenv("ALLOWED_ORIGIN", "*"),
 		APIToken:      os.Getenv("PLATFORM_API_TOKEN"),
 		GenerateRPM:   atoiOr("GENERATE_RPM", 60),
+
+		ExecuteRunnerURL:   os.Getenv("EXECUTE_RUNNER_URL"),
+		ExecuteRunnerToken: os.Getenv("EXECUTE_RUNNER_TOKEN"),
 	}
 	mustValidateConfig(cfg)
 

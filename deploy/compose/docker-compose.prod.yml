@@ -19,6 +19,23 @@ services:
       - "8090"                    # 仅容器网络可见,不对外
     restart: unless-stopped
 
+  # 自托管 execute 运行时(替代私有化没有的飞书 FaaS)。仅容器网络可见,
+  # 只由 api 经 call-chain B 调用,不对外暴露。详见 EXECUTE_RUNTIME.md。
+  execute-runner:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.execute-runner
+    environment:
+      PORT: "8095"
+      # runner 把它当 bearer 校验;api 用同一值作 EXECUTE_RUNNER_TOKEN 调用。
+      PLATFORM_API_TOKEN: "${EXECUTE_RUNNER_TOKEN:?需设置一个强随机 token(api↔runner 共享)}"
+      EXECUTE_ALLOW_PRIVATE: "false"   # SSRF 守卫 ON;每插件域名白名单始终强制
+      EXECUTE_TIMEOUT_SECONDS: "10"
+      EXECUTE_MAX_BODY_BYTES: "1048576"
+    expose:
+      - "8095"
+    restart: unless-stopped
+
   api:
     build:
       context: ../..
@@ -36,10 +53,14 @@ services:
       PLATFORM_API_TOKEN: "${PLATFORM_API_TOKEN:?需设置一个强随机 bearer token}"
       ALLOWED_ORIGIN: "${ALLOWED_ORIGIN:?填飞书 webview 来源;首跑可临时填 * 再收敛}"
       GENERATE_RPM: "${GENERATE_RPM:-60}"
+      # call-chain B:api 转发 /api/execute 到内网 runner。
+      EXECUTE_RUNNER_URL: "http://execute-runner:8095"
+      EXECUTE_RUNNER_TOKEN: "${EXECUTE_RUNNER_TOKEN:?需设置一个强随机 token(api↔runner 共享)}"
     expose:
       - "8080"                    # 只经 Caddy 暴露,不直接对外
     depends_on:
       - generator
+      - execute-runner
     restart: unless-stopped
 
   caddy:

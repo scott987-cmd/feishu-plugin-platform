@@ -36,6 +36,12 @@ type Config struct {
 	AllowedOrigin string // CORS origin ("*" for dev)
 	APIToken      string // if non-empty, require "Authorization: Bearer <token>" on /api/*
 	GenerateRPM   int    // max POST /api/generate per minute (0 = unlimited)
+
+	// ExecuteRunnerURL is the internal base URL of the self-hosted execute-runner
+	// (the FaaS replacement). Empty disables POST /api/execute (503). See
+	// EXECUTE_RUNTIME.md. ExecuteRunnerToken is the bearer the runner expects.
+	ExecuteRunnerURL   string
+	ExecuteRunnerToken string
 }
 
 // Server holds the API dependencies.
@@ -94,6 +100,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/action/zip", func(w http.ResponseWriter, r *http.Request) {
 		s.proxyGenerator(w, r, "/action/zip")
 	})
+	mux.HandleFunc("POST /api/execute", s.handleExecute) // forward to self-hosted execute-runner (call-chain B)
 	// Identity (Feishu OAuth) + per-user plugin ownership. Registered only when
 	// login is configured; all are no-ops/anonymous otherwise.
 	if s.authn != nil {

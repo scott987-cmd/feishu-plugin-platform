@@ -5,11 +5,15 @@
 // This is the platform's new hard currency (2026-06-22 pivot): the product is a
 // natural-language → field-shortcut generator for private-deployment customers
 // who have a Bitable + plugin capability but no marketplace and no dev team.
-// The runtime is ALWAYS Feishu's basekit FaaS — there is no self-hostable
-// runtime — so the generator must emit a standard basekit project that goes
-// through the official opdev/basekit upload+review chain. The generated source
-// being human-readable + auditable (with provenance) is itself the selling
-// point for 信创/政企 customers.
+//
+// Two runtime targets (see EXECUTE_RUNTIME.md):
+//   - Public cloud: emit a standard basekit project for the official
+//     opdev/basekit upload+review chain (Feishu's basekit FaaS runs execute).
+//   - Private deployment: there is NO Feishu FaaS — internal/execrt INTERPRETS
+//     this same DSL at request time on the customer's own k8s. The declarative,
+//     allowlisted shape below is exactly what makes that safe to interpret.
+// The generated source being human-readable + auditable (with provenance) is
+// itself the selling point for 信创/政企 customers.
 //
 // The DSL is the LLM's structured intermediate representation, not a runtime:
 // NL → FieldShortcut (this) → src/index.ts → testField → pack.
@@ -172,10 +176,17 @@ var (
 	// Authorization types we render + verify (subset of the SDK's 8 — the ones
 	// that cover the vast majority of real APIs).
 	ValidAuthTypes = []string{"HeaderBearerToken", "QueryParamToken", "CustomHeaderToken", "Basic"}
-	// NumberFormatter enum names exposed by the SDK (subset; extend as needed).
+	// NumberFormatter enum NAMES exactly as exposed by @lark-opdev/block-basekit-
+	// server-api (verified against dist/index.d.ts, 2026-06-23). The renderer emits
+	// `NumberFormatter.<NAME>`, so an off-list name compiles to undefined — keep
+	// this in lockstep with the SDK enum. (Previously included a non-existent
+	// "PERCENT_ROUNDED_2"; the real percentage formatters are PERCENTAGE_ROUNDED
+	// and PERCENTAGE.)
 	ValidFormatters = []string{
+		"INTEGER",
 		"DIGITAL_ROUNDED_1", "DIGITAL_ROUNDED_2", "DIGITAL_ROUNDED_3", "DIGITAL_ROUNDED_4",
-		"PERCENT_ROUNDED_2", "INTEGER",
+		"DIGITAL_THOUSANDS", "DIGITAL_THOUSANDS_DECIMALS",
+		"PERCENTAGE_ROUNDED", "PERCENTAGE",
 	}
 )
 

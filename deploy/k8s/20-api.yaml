@@ -56,6 +56,10 @@ spec:
               valueFrom: { configMapKeyRef: { name: platform-config, key: GENERATE_RPM } }
             - name: PLATFORM_API_TOKEN
               valueFrom: { secretKeyRef: { name: platform-secrets, key: PLATFORM_API_TOKEN } }
+            - name: EXECUTE_RUNNER_URL
+              valueFrom: { configMapKeyRef: { name: platform-config, key: EXECUTE_RUNNER_URL } }
+            - name: EXECUTE_RUNNER_TOKEN
+              valueFrom: { secretKeyRef: { name: platform-secrets, key: EXECUTE_RUNNER_TOKEN } }
           readinessProbe:
             httpGet: { path: /readyz, port: 8080 }
             initialDelaySeconds: 3

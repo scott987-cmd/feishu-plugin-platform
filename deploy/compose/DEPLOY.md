@@ -59,6 +59,36 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"mode":"nl","prompt":"按部门统计员工数量的柱状图"}' $D/api/generate
 ```
 
+### 3.1 验证 execute 运行时(自托管 FaaS 替身,call-chain B)
+
+`execute-runner` 是内网服务(不经 Caddy 暴露),api 经 `/api/execute` 转发。需在 `.env` 设
+`EXECUTE_RUNNER_TOKEN=$(openssl rand -hex 32)`(api↔runner 共享 bearer)。验证(走公网 api):
+
+```bash
+# 城市→天气 字段捷径 DSL(免 key 多步 Open-Meteo);inline dsl 形态
+curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{
+  "inputs": {"city": "Beijing"},
+  "dsl": {
+    "id":"city-weather","title":{"zh_CN":"城市天气"},
+    "domains":["geocoding-api.open-meteo.com","api.open-meteo.com"],
+    "formItems":[{"key":"city","label":{"zh_CN":"城市"},"component":"FieldSelect","supportType":["Text"],"required":true}],
+    "steps":[
+      {"id":"geo","method":"GET","url":"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1"},
+      {"id":"weather","method":"GET","url":"https://api.open-meteo.com/v1/forecast?latitude={geo.results.0.latitude}&longitude={geo.results.0.longitude}&current=temperature_2m,wind_speed_10m"}
+    ],
+    "result":{"kind":"object","properties":[
+      {"key":"temperature","type":"Number","label":{"zh_CN":"温度"},"primary":true,"expr":"res.current.temperature_2m"},
+      {"key":"wind_speed","type":"Number","label":{"zh_CN":"风速"},"expr":"res.current.wind_speed_10m"}
+    ]}
+  }
+}' $D/api/execute
+# 期望:{"ok":true,"data":{"temperature":<真实温度>,"wind_speed":<真实风速>,...}}
+```
+
+注:`execute-runner` 运行时 ~64Mi;低内存机(如 419MB)靠 swap 可跑,但 3 个 Go 镜像构建有内存压力,
+`compose up --build` 慢属正常,别中途打断。SSRF 守卫默认 ON(`EXECUTE_ALLOW_PRIVATE=false`),
+出网仅放行各插件 `domains` 白名单。
+
 ## 4. 重打插件指向公网 + 上传
 
 插件构建期把后端地址/Token 静态注入(webpack DefinePlugin → `PLATFORM_API_BASE`/`PLATFORM_API_TOKEN`)。

@@ -34,6 +34,9 @@ data:
   ALLOWED_ORIGIN: "https://REPLACE.feishu.cn"
   # Cap /api/generate per minute to protect the LLM budget.
   GENERATE_RPM: "60"
+  # Internal URL of the self-hosted execute-runner (FaaS replacement). The api
+  # forwards POST /api/execute here (call-chain B). See EXECUTE_RUNTIME.md.
+  EXECUTE_RUNNER_URL: "http://execute-runner:80"
 ---
 apiVersion: v1
 kind: Secret
@@ -52,3 +55,7 @@ stringData:
   # Shared bearer token the container plugin sends as Authorization: Bearer <...>.
   # Generate a strong random value (e.g. openssl rand -hex 32).
   PLATFORM_API_TOKEN: "REPLACE_ME"
+  # Bearer the api presents to the execute-runner (call-chain B). Generate a
+  # separate strong random value; the api reads it as EXECUTE_RUNNER_TOKEN and
+  # the runner enforces it as its PLATFORM_API_TOKEN.
+  EXECUTE_RUNNER_TOKEN: "REPLACE_ME"
