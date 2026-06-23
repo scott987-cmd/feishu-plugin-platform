@@ -329,6 +329,39 @@ func TestWritePathPutHeadersBodyJSON(t *testing.T) {
 	}
 }
 
+func TestExtendedResultTypes(t *testing.T) {
+	f := loadExchangeRate(t)
+	f.Domains = nil
+	f.Execute = shortcut.Execute{} // compute-only — value shapes come straight from inputs
+	f.FormItems = []shortcut.FormItem{
+		{Key: "phone", Label: shortcut.I18n{ZhCN: "电话"}, Component: "FieldSelect", SupportType: []string{"Text"}, Required: true},
+		{Key: "email", Label: shortcut.I18n{ZhCN: "邮箱"}, Component: "FieldSelect", SupportType: []string{"Text"}, Required: true},
+		{Key: "amount", Label: shortcut.I18n{ZhCN: "金额"}, Component: "FieldSelect", SupportType: []string{"Number"}, Required: true},
+	}
+	f.Result.Properties = []shortcut.ResultProp{
+		{Key: "label", Type: "Text", Primary: true, Expr: "in.email"},                                  // primary = Text ✓
+		{Key: "tel", Type: "Phone", Label: shortcut.I18n{ZhCN: "电话"}, Expr: "in.phone"},               // string
+		{Key: "mail", Type: "Email", Label: shortcut.I18n{ZhCN: "邮箱"}, Expr: "in.email"},              // string
+		{Key: "price", Type: "Currency", Label: shortcut.I18n{ZhCN: "价格"}, Formatter: "DIGITAL_ROUNDED_2", Expr: "in.amount"}, // number
+		{Key: "pct", Type: "Progress", Label: shortcut.I18n{ZhCN: "进度"}, Expr: "in.amount"},           // number
+		{Key: "_id", Type: "Text", Hidden: true, GroupByKey: true, Expr: "rand()"},
+	}
+	if err := f.Validate(); err != nil {
+		t.Fatalf("extended result types should validate, got: %v", err)
+	}
+	ts, _ := shortcut.RenderIndexTS(f)
+	for _, w := range []string{"type: FieldType.Phone", "type: FieldType.Email", "type: FieldType.Currency", "type: FieldType.Progress"} {
+		if !strings.Contains(ts, w) {
+			t.Errorf("extended-type render missing: %s", w)
+		}
+	}
+	// SDK rule: a primary column must be Text or Number — a primary non-scalar type is rejected.
+	f.Result.Properties[0] = shortcut.ResultProp{Key: "p", Type: "Phone", Primary: true, Expr: "in.phone"}
+	if err := f.Validate(); err == nil {
+		t.Error("a primary Phone column must be rejected (SDK: primary is Text|Number only)")
+	}
+}
+
 func TestMultiStepChain(t *testing.T) {
 	f := loadExchangeRate(t)
 	f.Auth = nil

@@ -137,7 +137,14 @@ type Step struct {
 // refused before we render any TypeScript.
 var (
 	ValidComponents  = []string{"FieldSelect", "Input", "SingleSelect"}
-	ValidFieldTypes  = []string{"Number", "Text", "DateTime", "SingleSelect", "Checkbox"}
+	// ValidFieldTypes are the SDK FieldType names usable as result column types and
+	// (for FieldSelect) pickable input types. Scalar types (Phone/Email/Currency/
+	// Progress/Rating/Barcode) carry the same string/number value as Text/Number —
+	// only the column semantics differ. Url ({text,link} shape) and MultiSelect
+	// (array value) are intentionally omitted pending real-cell verification.
+	ValidFieldTypes = []string{"Number", "Text", "DateTime", "SingleSelect", "Checkbox", "Phone", "Email", "Currency", "Progress", "Rating", "Barcode"}
+	// primaryFieldTypes: the SDK restricts a PRIMARY result column to Text | Number.
+	primaryFieldTypes = []string{"Text", "Number"}
 	ValidResultKinds = []string{"object"}
 	ValidMethods     = []string{"GET", "POST", "PUT", "PATCH", "DELETE"}
 	// Authorization types we render + verify (subset of the SDK's 8 — the ones
@@ -260,6 +267,9 @@ func (f FieldShortcut) Validate() error {
 		}
 		if !slices.Contains(ValidFieldTypes, p.Type) {
 			errs = append(errs, fmt.Errorf("result.properties[%d].type %q invalid", i, p.Type))
+		}
+		if p.Primary && !slices.Contains(primaryFieldTypes, p.Type) {
+			errs = append(errs, fmt.Errorf("result.properties[%d]: a primary column must be Text or Number (SDK constraint), got %q", i, p.Type))
 		}
 		if p.Formatter != "" && !slices.Contains(ValidFormatters, p.Formatter) {
 			errs = append(errs, fmt.Errorf("result.properties[%d].formatter %q invalid", i, p.Formatter))
