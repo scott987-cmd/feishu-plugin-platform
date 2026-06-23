@@ -326,9 +326,10 @@
       <a href="#demo">使用演示</a>
       <a href="#audience">为谁打造</a>
       <a href="#generators">两套生成器</a>
+      <a href="#capabilities">能力总览</a>
       <a href="#architecture">架构</a>
       <a href="#security">安全模型</a>
-      <a class="nav-cta" href="#">GitHub</a>
+      <a class="nav-cta" href="https://github.com/scott987-cmd/feishu-plugin-platform">GitHub</a>
     </nav>
   </div>
 </header>
@@ -340,7 +341,7 @@
     <h1>用<span class="accent">一句话</span>，生成可审计的<br/>飞书 basekit 插件</h1>
     <p class="sub">自然语言一句话描述需求 → 生成可<b>人工逐行审计</b>的真实飞书 basekit 插件（TypeScript），直接上传到飞书使用。<span class="en">NL → DSL → auditable TS → real Feishu.</span></p>
     <div class="hero-actions">
-      <a class="btn btn-primary" href="#">
+      <a class="btn btn-primary" href="https://github.com/scott987-cmd/feishu-plugin-platform">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.2.8-.5v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.4-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.4 11.4 0 0 1 6 0C17.3 4.6 18.3 5 18.3 5c.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.6.8.5 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5Z"/></svg>
         在 GitHub 上查看
       </a>
@@ -353,6 +354,7 @@
       <span class="pill"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 生成物=<b>人类可读源码</b>，可自行审计后送审</span>
       <span class="pill"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 三道编译期护栏，<b>绝不 eval</b></span>
       <span class="pill"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 端到端已真上传飞书并上线运行</span>
+      <span class="pill"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 飞书 OAuth 登录 · 插件<b>归属个人</b> · 持久化</span>
     </div>
   </div>
 </section>
@@ -434,15 +436,15 @@
           </div>
         </div>
         <div class="gen-body">
-          <p class="desc">选输入字段 → 调一个外部 API → 把结果写回输出列。支持 4 种鉴权、GET/POST + JSON body、表达式映射与多列 Object 输出。</p>
+          <p class="desc">选输入字段 → 调外部 API → 把结果写回输出列。4 种鉴权、GET/POST/PUT/PATCH/DELETE + 嵌套 JSON body、<b>多步链式</b>（后一步用前一步响应）、条件逻辑（if/eq/gt/coalesce）、多列 Object 输出。</p>
           <div class="nl-example">
             <span class="lbl">一句话示例</span>
             <p>"读取『金额(USD)』列，调汇率 API 换算成人民币，结果写到『金额(CNY)』，保留两位小数。"</p>
           </div>
           <ul class="produces">
             <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>鉴权：<code style="font-family:var(--mono);font-size:12px;color:var(--brand)">HeaderBearer / QueryParam / CustomHeader / Basic</code></span></li>
-            <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>表达式映射：<code style="font-family:var(--mono);font-size:12px;color:var(--brand)">in.&lt;输入&gt; · res.&lt;响应路径&gt; · 算术 · 数组下标 · rand()</code></span></li>
-            <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>多列 Object 输出 + NumberFormatter 数字格式化</span></li>
+            <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>表达式映射：<code style="font-family:var(--mono);font-size:12px;color:var(--brand)">in.&lt;输入&gt; · res.&lt;路径&gt; · 算术 · 函数(trim/upper/round…) · 条件(if/eq/gt) · split</code></span></li>
+            <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>13 种结果列类型（含 Url 可点击 / MultiSelect 多选）+ NumberFormatter</span></li>
           </ul>
         </div>
         <div class="gen-foot">→ 产出：可上传的 addField 插件工程（src/index.ts + meta.json）</div>
@@ -472,6 +474,41 @@
         <div class="gen-foot">→ 产出：可上传的 addAction 插件工程（block-basekit-cli upload ✓）</div>
       </div>
 
+    </div>
+  </div>
+</section>
+
+<!-- ============ CAPABILITIES ============ -->
+<section id="capabilities">
+  <div class="wrap">
+    <span class="eyebrow"><span class="dot"></span>能力总览 · What it generates（全部真机验证）</span>
+    <h2 class="section-title">从「读数据」到「写回记录」，逐项真机验证</h2>
+    <p class="section-lead">每一项都经 <code>testField</code>/<code>testAction</code> 真调外部 API，或对真飞书 Base 写读确认——不是只编译通过。<span class="en">Every capability verified on a real machine, not just compiled.</span></p>
+    <div class="audience-grid">
+      <div class="ac-card">
+        <h3>读取与变换</h3>
+        <p>GET→JSON 取数 · AI 入格（POST 嵌套 body，如 DeepSeek）· 文本/数学函数（trim/upper/substr/round/floor…）· compute-only「URL 即结果」。</p>
+      </div>
+      <div class="ac-card">
+        <h3>条件逻辑</h3>
+        <p>比较 / 布尔 / 分支以<b>函数形式</b>表达（eq/gt/and/if/coalesce）——语法绝不放原始 <code>&lt; &gt; ? :</code>，从不 eval。例：身份证按第 17 位奇偶判性别。</p>
+      </div>
+      <div class="ac-card">
+        <h3>写路径 + 多步链式</h3>
+        <p>GET/POST/PUT/PATCH/DELETE + 自定义请求头 + 嵌套 body；<b>多步链式</b>——后一步用前一步的响应（如「取 token → 带 token 调 API」）。</p>
+      </div>
+      <div class="ac-card">
+        <h3>连接器：写回 Base 记录</h3>
+        <p>自动化动作调飞书 OpenAPI（取 token → <code>batch_create</code>）把数据写成多维表格记录——已真机写入一条并读回确认。</p>
+      </div>
+      <div class="ac-card">
+        <h3>13 种结果列类型</h3>
+        <p>Text / Number / DateTime / Checkbox / SingleSelect / Phone / Email / Currency / Progress / Rating / Barcode / <b>Url（可点击）</b> / <b>MultiSelect（多选）</b>。</p>
+      </div>
+      <div class="ac-card">
+        <h3>用户身份 + 个人归属</h3>
+        <p>飞书 OAuth 登录；每个人创建的插件按 <code>open_id</code> <b>归属个人</b>、可持久化（Bitable，重启不丢）；源码与 <code>dsl.json</code> 带<b>创建者署名</b>。</p>
+      </div>
     </div>
   </div>
 </section>
@@ -581,7 +618,7 @@
 
         <!-- BFF note -->
         <rect x="252" y="318" width="436" height="30" rx="9" fill="#f6faf8" stroke="#dde8e4"/>
-        <text x="470" y="338" text-anchor="middle" class="box-s">cmd/api (BFF 网关) · cmd/generator (持 LLM key) · internal/shortcut (DSL·校验·渲染·zip)</text>
+        <text x="470" y="338" text-anchor="middle" class="box-s">cmd/api (BFF·OAuth·PluginStore) · cmd/generator (持 LLM key) · internal/shortcut (DSL·校验·渲染·zip)</text>
       </svg>
     </div>
     <div class="arch-legend">
@@ -609,7 +646,7 @@
         <span class="badge">02</span>
         <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 6-6 6 6 6M16 6l6 6-6 6"/></svg></div>
         <h3>表达式 allowlist</h3>
-        <p>映射表达式走受限白名单文法（<code>in. / res. / 算术 / 下标 / rand()</code>），<b>绝不 eval、绝不执行任意代码</b>。</p>
+        <p>映射表达式走受限白名单文法（<code>in. / res. / 算术 / 函数 / 条件(if/eq/gt) / split</code>），<b>绝不 eval、绝不执行任意代码</b>。</p>
       </div>
       <div class="sec-card">
         <span class="badge">03</span>
@@ -709,7 +746,7 @@ basekit.<span class="f">addField</span>({
       <div class="foot-cols">
         <div class="foot-col">
           <h5>项目</h5>
-          <a href="#">GitHub 仓库</a>
+          <a href="https://github.com/scott987-cmd/feishu-plugin-platform">GitHub 仓库</a>
           <a href="#demo">使用演示</a>
           <a href="#architecture">架构说明</a>
           <a href="#security">安全模型</a>
@@ -718,13 +755,13 @@ basekit.<span class="f">addField</span>({
           <h5>生成器</h5>
           <a href="#generators">字段捷径 addField</a>
           <a href="#generators">自动化 addAction</a>
+          <a href="#capabilities">能力总览</a>
           <a href="#code">生成物示例</a>
         </div>
         <div class="foot-col">
           <h5>资源</h5>
-          <a href="#">README</a>
-          <a href="#">CLI · shortcutgen</a>
-          <a href="#">Issues</a>
+          <a href="https://github.com/scott987-cmd/feishu-plugin-platform#readme">README</a>
+          <a href="https://github.com/scott987-cmd/feishu-plugin-platform/issues">Issues</a>
         </div>
       </div>
     </div>
