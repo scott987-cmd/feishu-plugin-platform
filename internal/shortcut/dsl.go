@@ -140,9 +140,9 @@ var (
 	// ValidFieldTypes are the SDK FieldType names usable as result column types and
 	// (for FieldSelect) pickable input types. Scalar types (Phone/Email/Currency/
 	// Progress/Rating/Barcode) carry the same string/number value as Text/Number —
-	// only the column semantics differ. Url ({text,link} shape) and MultiSelect
-	// (array value) are intentionally omitted pending real-cell verification.
-	ValidFieldTypes = []string{"Number", "Text", "DateTime", "SingleSelect", "Checkbox", "Phone", "Email", "Currency", "Progress", "Rating", "Barcode"}
+	// only the column semantics differ. Url is special-cased to a {text,link} cell
+	// value in the renderer. MultiSelect (array value) is omitted pending array output.
+	ValidFieldTypes = []string{"Number", "Text", "DateTime", "SingleSelect", "Checkbox", "Phone", "Email", "Currency", "Progress", "Rating", "Barcode", "Url"}
 	// primaryFieldTypes: the SDK restricts a PRIMARY result column to Text | Number.
 	primaryFieldTypes = []string{"Text", "Number"}
 	ValidResultKinds = []string{"object"}

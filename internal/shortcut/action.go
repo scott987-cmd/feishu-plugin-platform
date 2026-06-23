@@ -111,11 +111,11 @@ type ActionOutput struct {
 // actionPropType maps a FieldType enum name to the action resultType's string type.
 func actionPropType(fieldType string) string {
 	switch fieldType {
-	case "Number":
+	case "Number", "Currency", "Progress", "Rating":
 		return "number"
 	case "Checkbox":
 		return "boolean"
-	default:
+	default: // Text, Phone, Email, Barcode, Url, DateTime, SingleSelect
 		return "string"
 	}
 }

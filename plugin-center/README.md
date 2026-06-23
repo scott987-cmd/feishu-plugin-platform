@@ -21,6 +21,7 @@ API** via the basekit `testField` / `testAction` harness — not just compiled.
 | [`idcard-birth`](idcard-birth/) | field · compute · `substr()` | 从身份证号截取出生日期(第7起8位) | `11010119900307123X` → `19900307` |
 | [`idcard-gender`](idcard-gender/) | field · compute · **conditional** `if`/`eq`/`substr` | 按身份证第17位奇偶判别性别(奇=男/偶=女) | `…0011` (17th=1) → `男` · `…0028` (17th=2) → `女` (**testField-verified**) |
 | [`to-upper`](to-upper/) | field · compute · `upper()` | 文本转全大写 | `"feishu"` → `"FEISHU"` |
+| [`github-homepage`](github-homepage/) | field · compute · **Url 列(可点击链接)** | GitHub 用户名 → 可点击主页链接 | `torvalds` → `{text,link: https://github.com/torvalds}`(`{text,link}` 形状已对真 Base URL 字段验证) |
 | [`ai-polish`](ai-polish/) | field · **POST + nested JSON body + Bearer auth** (AI) | 调用 DeepSeek 大模型润色中文文本 | `"今天天气不错我们去公园玩吧"` → polished Chinese paragraph (**real LLM call verified**; fill your key in `config.json`) |
 | [`fx-action`](fx-action/) | **automation action** · GET→JSON | 自动化:人民币金额按实时汇率换算,输出美元金额+汇率 | `{usd_amount: 14.7, exchange_rate: 0.147}` (100 CNY) · **also uploaded + published + run in a real Base automation** |
 | [`feishu-record-writeback`](feishu-record-writeback/) | **connector** · action · **multi-step** (token → `batch_create`) | 写回:把文本作为新记录写入飞书多维表格(连接器) | **真机写入已确认**:testAction 真往一张测试表写入 1 条记录 → `code:0, record_id=recvnkoBDe0ohs`,读回字段正确,临时表已清理。app 凭证/目标 Base 为运行时输入(绝不烤入插件) |

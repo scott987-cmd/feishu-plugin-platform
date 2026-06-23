@@ -75,12 +75,20 @@ func renderFetchInit(e Execute) string {
 }
 
 // renderPropValue lowers a result property's value to JS: a template renders as
-// a JS template literal (`...${inp.key}...`); otherwise the expression is translated.
+// a JS template literal (`...${inp.key}...`); otherwise the expression is
+// translated. A Url column writes a Base URL-cell value `{ text, link }` (the
+// expr/template produces the URL, used as both the display text and the link).
 func renderPropValue(p ResultProp) string {
+	var v string
 	if strings.TrimSpace(p.Template) != "" {
-		return "`" + renderURLTemplate(p.Template) + "`"
+		v = "`" + renderURLTemplate(p.Template) + "`"
+	} else {
+		v = translateExpr(p.Expr)
 	}
-	return translateExpr(p.Expr)
+	if p.Type == "Url" {
+		return "{ text: " + v + ", link: " + v + " }"
+	}
+	return v
 }
 
 // tsType maps a FieldType enum name to the TS type of an input param.

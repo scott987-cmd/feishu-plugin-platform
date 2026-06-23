@@ -362,6 +362,32 @@ func TestExtendedResultTypes(t *testing.T) {
 	}
 }
 
+func TestUrlResultType(t *testing.T) {
+	f := loadExchangeRate(t)
+	f.Domains = nil
+	f.Execute = shortcut.Execute{} // compute-only: build a link from the input
+	f.FormItems = []shortcut.FormItem{
+		{Key: "slug", Label: shortcut.I18n{ZhCN: "标识"}, Component: "FieldSelect", SupportType: []string{"Text"}, Required: true},
+	}
+	f.Result.Properties = []shortcut.ResultProp{
+		{Key: "name", Type: "Text", Primary: true, Expr: "in.slug"},
+		{Key: "homepage", Type: "Url", Label: shortcut.I18n{ZhCN: "主页"}, Template: "https://example.com/u/{slug}"},
+		{Key: "_id", Type: "Text", Hidden: true, GroupByKey: true, Expr: "rand()"},
+	}
+	if err := f.Validate(); err != nil {
+		t.Fatalf("Url result type should validate, got: %v", err)
+	}
+	ts, _ := shortcut.RenderIndexTS(f)
+	for _, w := range []string{
+		"type: FieldType.Url",
+		"homepage: { text: `https://example.com/u/${inp.slug}`, link: `https://example.com/u/${inp.slug}` },", // {text,link} cell value
+	} {
+		if !strings.Contains(ts, w) {
+			t.Errorf("Url render missing:\n  %s\n--- got ---\n%s", w, ts)
+		}
+	}
+}
+
 func TestMultiStepChain(t *testing.T) {
 	f := loadExchangeRate(t)
 	f.Auth = nil
