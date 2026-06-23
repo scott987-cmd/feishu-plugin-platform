@@ -28,6 +28,7 @@ const (
 		"(4) `expr` uses ONLY: a number, 'single-quoted string', rand(), in.<inputKey>, res.<dotted.json.path>, with + - * / % ( ) , and functions concat/upper/lower/trim/substr/slice/replace/len/urlencode/round/floor/ceil/abs/min/max. For conditionals use FUNCTIONS (no raw < > == ? :): comparison eq/ne/gt/gte/lt/lte, boolean and/or/not, branching if(cond,a,b)/coalesce/default. Examples: `in.amount * res.rates.USD` · `trim(in.text)` · `if(gt(res.code,400), 'error', 'ok')`. " +
 		"(5) method: GET to read; POST/PUT/PATCH to write to an external system (e.g. update a ticket/CRM record); DELETE to remove. Flat body → execute.body (\"{inputKey}\" injects that input, else literal); NESTED body → execute.bodyJson (full JSON shape, \"{inputKey}\" where an input goes); extra headers → execute.headers (do NOT set Content-Type or the auth header). " +
 		"(6) If the API needs a key/token, add `auth` { type:'APIKey', label } (the user enters it; the runtime injects it). Omit for open APIs. " +
+		"(7) MULTI-STEP — for chained calls (a later request uses an earlier response), use `steps` INSTEAD of `execute`: ordered id/url/method steps; reference a prior step with {stepId.json.path} and inputs with {inputKey}; result exprs map the LAST step's response (res.<path>); max 3; no auth with steps. " +
 		"Reuse names from the request; pick sensible result types. id is a lowercase ascii slug."
 )
 
@@ -112,6 +113,7 @@ func actionSchema() map[string]any {
 					},
 				},
 			},
+			"steps": stepSchema(),
 		},
 	}
 }

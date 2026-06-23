@@ -47,6 +47,7 @@ Pick input column(s) → call one external API → write back one or more output
 
 - **4 auth types** the end-user fills in at config time (never hardcoded): `HeaderBearerToken`, `QueryParamToken`, `CustomHeaderToken`, `Basic`
 - `GET` / `POST` / `PUT` / `PATCH` / `DELETE` (read or write external systems), with flat or **nested JSON bodies** (`bodyJson`) and optional **custom request headers**
+- **Multi-step chaining** (`steps`, ≤3): a later request can use an earlier one's response — `{stepId.json.path}` flows step output into the next step's URL/headers/body (e.g. fetch a token → call an API with it; geocode → weather)
 - **Expression mapping** over two namespaces: `in.<inputKey>` (inputs) and `res.<dotted.json.path>` (response), plus `+ - * / % ( )`, array indices (`res.list.0.x`), `rand()`, string/number functions (`concat`/`upper`/`trim`/`substr`/`round`/`floor`/…), and **conditional logic in function form** — `eq`/`gt`/`and`/`if(cond,a,b)`/`coalesce` — so branching needs no raw `< > = ? :` operators
 - Multi-property **Object result** (several derived columns at once) with optional `NumberFormatter`
 

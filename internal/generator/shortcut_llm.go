@@ -37,6 +37,7 @@ const (
 		"(i) `template` is ONLY for inserting inputs VERBATIM into literal text — URL construction (QR/chart/image generators like api.qrserver.com) or raw concatenation, e.g. template \"https://api.qrserver.com/v1/create-qr-code/?data={text}\". A template does NOT transform its inputs. " +
 		"(ii) For any TRANSFORMATION of the input — uppercase, lowercase, trim, substring, replace, length, etc. — DO NOT use a template; use `expr` with the matching function, e.g. expr upper(in.text) / trim(in.text) / substr(in.idcard, 6, 8) / concat(in.last, in.first). Never invent res.<path> for a no-fetch plugin. " +
 		"(6) AUTH — default to NONE. Most public APIs (ip-api.com, exchangerate-api.com, api.mymemory.translated.net, open-data APIs) need NO key: you MUST omit `auth` entirely for them — adding auth to a keyless API BREAKS the plugin. Add `auth` ONLY when the API genuinely requires a credential the user must obtain; then pick the type (the END-USER enters it — never hardcode, never put the token in execute.url): QueryParamToken+paramName (key in URL query, e.g. appid); HeaderBearerToken (Authorization: Bearer); CustomHeaderToken+paramName=header name (e.g. X-API-Key); Basic (username+password). When unsure, omit auth. " +
+		"(7) MULTI-STEP (chaining) — if the task needs TWO+ requests where a later call uses an earlier call's response (fetch a token then call an API; look up an id then fetch its detail), use `steps` INSTEAD of `execute`: an ordered array, each step has id/url/method (+ optional headers/body/bodyJson). In a later step reference a prior step's response value with {stepId.json.path} and inputs with {inputKey} (e.g. header Authorization=\"Bearer {auth.access_token}\"). Result exprs map the LAST step's response via res.<path>. Max 3 steps; never set both execute and steps; no auth with steps (make step 1 fetch the credential). " +
 		"Reuse names implied by the user's request; pick sensible field types and number formatters. id is a lowercase ascii slug like exchange-rate."
 )
 
@@ -140,6 +141,30 @@ func fieldShortcutSchema() map[string]any {
 						"additionalProperties": map[string]any{"type": "string"},
 					},
 				},
+			},
+			"steps": stepSchema(),
+		},
+	}
+}
+
+// stepSchema is the JSON schema for a multi-step pipeline (shared by field +
+// action). Plain literals (no closures) so it can live outside the schema funcs.
+func stepSchema() map[string]any {
+	str := map[string]any{"type": "string"}
+	strMap := map[string]any{"type": "object", "additionalProperties": str}
+	return map[string]any{
+		"type":        "array",
+		"description": "OPTIONAL multi-step pipeline (chaining): ordered requests where a LATER step uses an EARLIER step's response. Use INSTEAD of execute (never both). In any later step's url/headers/body, reference a prior step's value with {stepId.json.path} and an input with {inputKey}. Result exprs map the LAST step's response via res.<path>. Max 3 steps; no auth with steps (fetch the credential in step 1).",
+		"items": map[string]any{
+			"type":     "object",
+			"required": []string{"id", "url", "method"},
+			"properties": map[string]any{
+				"id":       map[string]any{"type": "string", "description": "ascii id; referenced by later steps as {id.path}; the last step is `res`"},
+				"url":      map[string]any{"type": "string", "description": "request URL; host MUST be in domains; may embed {inputKey} and {priorStepId.path}"},
+				"method":   map[string]any{"type": "string", "enum": shortcut.ValidMethods},
+				"headers":  strMap,
+				"body":     strMap,
+				"bodyJson": map[string]any{"type": "object", "description": "POST/PUT/PATCH nested body; string values may embed {inputKey}/{priorStepId.path}"},
 			},
 		},
 	}

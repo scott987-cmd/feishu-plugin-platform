@@ -329,6 +329,60 @@ func TestWritePathPutHeadersBodyJSON(t *testing.T) {
 	}
 }
 
+func TestMultiStepChain(t *testing.T) {
+	f := loadExchangeRate(t)
+	f.Auth = nil
+	f.Domains = []string{"httpbin.org"}
+	f.Execute = shortcut.Execute{} // no single request — use steps
+	f.FormItems = []shortcut.FormItem{
+		{Key: "seed", Label: shortcut.I18n{ZhCN: "种子"}, Component: "FieldSelect", SupportType: []string{"Text"}, Required: true},
+	}
+	f.Result.Properties = []shortcut.ResultProp{
+		{Key: "final", Type: "Text", Primary: true, Expr: "res.json.echoed"},
+		{Key: "_id", Type: "Text", Hidden: true, GroupByKey: true, Expr: "rand()"},
+	}
+	f.Steps = []shortcut.Step{
+		{ID: "first", URL: "https://httpbin.org/anything/{seed}", Method: "GET"},
+		{ID: "second", URL: "https://httpbin.org/anything", Method: "POST",
+			Headers:  map[string]string{"X-From-First": "{first.method}"},   // header uses step 1's output
+			BodyJSON: []byte(`{"echoed":"{first.url}"}`)},                    // body uses step 1's output
+	}
+	if err := f.Validate(); err != nil {
+		t.Fatalf("multi-step should validate, got: %v", err)
+	}
+	ts, err := shortcut.RenderIndexTS(f)
+	if err != nil {
+		t.Fatalf("render failed: %v", err)
+	}
+	for _, w := range []string{
+		"const s_first: any = await fetch(`https://httpbin.org/anything/${inp.seed}`, { method: 'GET' });",
+		"const s_second: any = await fetch(`https://httpbin.org/anything`,",
+		"${s_first?.method}", // header cross-step ref
+		"${s_first?.url}",    // bodyJson cross-step ref
+		"const res: any = s_second;",
+		"final: res?.json?.echoed,",
+	} {
+		if !strings.Contains(ts, w) {
+			t.Errorf("multi-step render missing:\n  %s\n--- got ---\n%s", w, ts)
+		}
+	}
+	// a step may not reference a LATER step (forward ref).
+	bad := f
+	bad.Steps = []shortcut.Step{
+		{ID: "first", URL: "https://httpbin.org/anything/{second.x}", Method: "GET"},
+		{ID: "second", URL: "https://httpbin.org/anything", Method: "GET"},
+	}
+	if err := bad.Validate(); err == nil {
+		t.Error("a step referencing a later step must be rejected")
+	}
+	// steps and a single execute.url are mutually exclusive.
+	bad2 := f
+	bad2.Execute = shortcut.Execute{URL: "https://httpbin.org/x", Method: "GET"}
+	if err := bad2.Validate(); err == nil {
+		t.Error("steps + execute.url together must be rejected")
+	}
+}
+
 func TestBodyJSONNested(t *testing.T) {
 	f := loadExchangeRate(t)
 	f.Domains = []string{"api.deepseek.com"}

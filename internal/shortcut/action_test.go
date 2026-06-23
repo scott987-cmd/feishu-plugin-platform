@@ -115,6 +115,38 @@ func TestActionRejections(t *testing.T) {
 	}
 }
 
+func TestActionMultiStepChain(t *testing.T) {
+	a := validAction()
+	a.Domains = []string{"httpbin.org"}
+	a.Execute = shortcut.Execute{}
+	a.Inputs = []shortcut.ActionInput{{Key: "seed", Label: "种子", Required: true}}
+	a.Result = []shortcut.ActionOutput{{Key: "out", Label: "结果", Type: "Text", Expr: "res.json.v"}}
+	a.Steps = []shortcut.Step{
+		{ID: "lookup", URL: "https://httpbin.org/anything/{seed}", Method: "GET"},
+		{ID: "use", URL: "https://httpbin.org/anything", Method: "POST", BodyJSON: []byte(`{"v":"{lookup.method}"}`)},
+	}
+	if err := a.Validate(); err != nil {
+		t.Fatalf("action multi-step should validate, got: %v", err)
+	}
+	ts, err := shortcut.RenderActionTS(a)
+	if err != nil {
+		t.Fatalf("render failed: %v", err)
+	}
+	for _, w := range []string{
+		"const s_lookup: any = await fetch(`https://httpbin.org/anything/${args.seed}`, { method: 'GET' });", // input ref rebinds to args.
+		"${s_lookup?.method}",      // cross-step ref unaffected by the rebind
+		"const res: any = s_use;",
+		"out: res?.json?.v,",
+	} {
+		if !strings.Contains(ts, w) {
+			t.Errorf("action multi-step render missing:\n  %s\n--- got ---\n%s", w, ts)
+		}
+	}
+	if strings.Contains(ts, "inp.") {
+		t.Errorf("action multi-step leaked the inp. binding:\n%s", ts)
+	}
+}
+
 func TestActionWritePathPatchBodyJSON(t *testing.T) {
 	a := validAction()
 	a.Domains = []string{"api.example.com"}

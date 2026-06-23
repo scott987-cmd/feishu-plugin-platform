@@ -76,6 +76,7 @@ type Action struct {
 	Inputs  []ActionInput  `json:"inputs"`
 	Result  []ActionOutput `json:"result"`
 	Execute Execute        `json:"execute"`
+	Steps   []Step         `json:"steps,omitempty"` // optional multi-step pipeline; mutually exclusive with Execute
 }
 
 // ActionAuth maps to the SDK's Action.authorization. Unlike fields (which expose
@@ -174,6 +175,16 @@ func (a Action) Validate() error {
 			errs = append(errs, fmt.Errorf("result[%d].expr: %w", i, err))
 		}
 	}
+	if len(a.Steps) > 0 {
+		if strings.TrimSpace(a.Execute.URL) != "" {
+			errs = append(errs, errors.New("set either execute (single request) or steps (multi-step), not both"))
+		}
+		if a.Auth != nil {
+			errs = append(errs, errors.New("auth is not supported with steps yet — fetch the credential in the first step and reference it later"))
+		}
+		errs = append(errs, validateSteps(a.Steps, inputKeys, a.Domains))
+		return errors.Join(errs...)
+	}
 	if strings.TrimSpace(a.Execute.URL) == "" {
 		errs = append(errs, errors.New("execute.url is required"))
 	} else if err := validateURLTemplate(a.Execute.URL, a.Domains, inputKeys); err != nil {
@@ -267,12 +278,25 @@ func RenderActionTS(a Action) (string, error) {
 	emitExprHelpers(&b, "    ", actVals)
 	b.WriteString(actionHelpers)
 	w("    try {\n")
-	// Reuse the shared fetch-init renderer (method + headers + flat/structured body),
-	// then rebind input refs from `inp.` to `args.` (the action execute param).
-	initObj := strings.ReplaceAll(renderFetchInit(a.Execute), "inp.", "args.")
-	// URL placeholders bind to `args` (the action execute param), not `inp`.
-	actionURL := strings.ReplaceAll(renderURLTemplate(a.Execute.URL), "${inp.", "${args.")
-	w("      const res: any = await fetch(`%s`, %s);\n", actionURL, initObj)
+	if len(a.Steps) > 0 {
+		// Multi-step pipeline; render with inp. binding then rebind to args.
+		inputKeys := map[string]bool{}
+		for _, in := range a.Inputs {
+			inputKeys[in.Key] = true
+		}
+		stepsJS, err := renderStepsJS(a.Steps, inputKeys)
+		if err != nil {
+			return "", err
+		}
+		b.WriteString(strings.ReplaceAll(stepsJS, "inp.", "args."))
+	} else {
+		// Reuse the shared fetch-init renderer (method + headers + flat/structured body),
+		// then rebind input refs from `inp.` to `args.` (the action execute param).
+		initObj := strings.ReplaceAll(renderFetchInit(a.Execute), "inp.", "args.")
+		// URL placeholders bind to `args` (the action execute param), not `inp`.
+		actionURL := strings.ReplaceAll(renderURLTemplate(a.Execute.URL), "${inp.", "${args.")
+		w("      const res: any = await fetch(`%s`, %s);\n", actionURL, initObj)
+	}
 	w("      return {\n")
 	for i, p := range a.Result {
 		w("        %s: %s,\n", p.Key, actVals[i])

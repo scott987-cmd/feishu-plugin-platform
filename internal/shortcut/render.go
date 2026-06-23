@@ -246,7 +246,18 @@ func RenderIndexTS(f FieldShortcut) (string, error) {
 	emitExprHelpers(&b, "    ", propVals)
 	b.WriteString(executeHelpers)
 	w("    try {\n")
-	if strings.TrimSpace(f.Execute.URL) != "" {
+	if len(f.Steps) > 0 {
+		// Multi-step: chained requests; each step binds to s_<id>, last aliased to res.
+		formKeys := map[string]bool{}
+		for _, it := range f.FormItems {
+			formKeys[it.Key] = true
+		}
+		stepsJS, err := renderStepsJS(f.Steps, formKeys)
+		if err != nil {
+			return "", err
+		}
+		b.WriteString(stepsJS)
+	} else if strings.TrimSpace(f.Execute.URL) != "" {
 		// Fetch mode: build the init object (method + optional headers + body) + optional authId.
 		init := renderFetchInit(f.Execute)
 		authArg := ""

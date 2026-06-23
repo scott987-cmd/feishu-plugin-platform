@@ -32,7 +32,8 @@ type FieldShortcut struct {
 	Auth      *Auth      `json:"auth,omitempty"` // optional credential the end-user supplies at config time
 	FormItems []FormItem `json:"formItems"`   // shortcut inputs
 	Result    Result     `json:"result"`      // output (writeback) shape
-	Execute   Execute    `json:"execute"`     // the fetch + map plan
+	Execute   Execute    `json:"execute"`     // single fetch + map plan (or omit and use Steps)
+	Steps     []Step     `json:"steps,omitempty"` // optional: ordered multi-step pipeline (chaining); mutually exclusive with Execute
 }
 
 // Auth declares a credential the shortcut's USER fills in (never hardcoded). The
@@ -116,6 +117,22 @@ type Execute struct {
 // methodHasBody reports whether m is an HTTP method that may carry a request body.
 func methodHasBody(m string) bool { return m == "POST" || m == "PUT" || m == "PATCH" }
 
+// Step is one request in a multi-step pipeline (Steps). Its JSON response is
+// bound to the variable s_<ID> and is referenceable by LATER steps (in url,
+// headers, body) and — for the final step, aliased to `res` — by result exprs.
+// Placeholders may be an input {formKey} or a prior step's value {stepID.json.path}.
+// Multi-step is for chaining (e.g. fetch token → use it; lookup id → fetch detail);
+// it is mutually exclusive with the single Execute, and (Phase-0) does not combine
+// with Auth.
+type Step struct {
+	ID       string            `json:"id"`     // ascii; later refs use {id.path} / s_<id>
+	URL      string            `json:"url"`    // may contain {formKey} and {priorStepID.path}
+	Method   string            `json:"method"` // GET | POST | PUT | PATCH | DELETE
+	Headers  map[string]string `json:"headers,omitempty"`
+	Body     map[string]string `json:"body,omitempty"`
+	BodyJSON json.RawMessage   `json:"bodyJson,omitempty"`
+}
+
 // Allowed enum values, kept explicit so LLM/DSL output can be validated and
 // refused before we render any TypeScript.
 var (
@@ -138,6 +155,7 @@ const (
 	MaxProperties = 20
 	MaxDomains    = 20
 	MaxStrLen     = 512
+	MaxSteps      = 3 // bound the multi-step pipeline (sandbox time/memory)
 )
 
 var (
@@ -160,9 +178,16 @@ func (f FieldShortcut) Validate() error {
 	// Two modes: fetch (calls execute.url, may map res.*) vs compute-only (no
 	// outbound request — outputs are templates / input-only expressions, e.g.
 	// QR/image/chart "URL is the result", or local formatting).
-	fetchMode := strings.TrimSpace(f.Execute.URL) != ""
+	multiStep := len(f.Steps) > 0
+	fetchMode := strings.TrimSpace(f.Execute.URL) != "" || multiStep
 	if fetchMode && len(f.Domains) == 0 {
-		errs = append(errs, errors.New("domains must not be empty when execute.url is set (addDomainList allowlist)"))
+		errs = append(errs, errors.New("domains must not be empty in fetch mode (addDomainList allowlist)"))
+	}
+	if multiStep && strings.TrimSpace(f.Execute.URL) != "" {
+		errs = append(errs, errors.New("set either execute (single request) or steps (multi-step), not both"))
+	}
+	if multiStep && f.Auth != nil {
+		errs = append(errs, errors.New("auth is not supported with steps yet — for chained auth, make the first step fetch the token and reference it in a later step"))
 	}
 	if len(f.Domains) > MaxDomains {
 		errs = append(errs, fmt.Errorf("too many domains (%d > %d)", len(f.Domains), MaxDomains))
@@ -259,8 +284,9 @@ func (f FieldShortcut) Validate() error {
 		}
 	}
 
-	// execute is optional: present = fetch mode (validate it); absent = compute-only.
-	if fetchMode {
+	// Single execute: present = fetch mode (validate it); absent = compute-only.
+	// In multi-step mode the single Execute is unused (steps are validated below).
+	if fetchMode && !multiStep {
 		if err := validateURLTemplate(f.Execute.URL, f.Domains, formKeys); err != nil {
 			errs = append(errs, fmt.Errorf("execute.url: %w", err))
 		}
@@ -306,6 +332,9 @@ func (f FieldShortcut) Validate() error {
 		if ref := bodyRef(v); ref != "" && !formKeys[ref] {
 			errs = append(errs, fmt.Errorf("execute.headers[%s] references unknown form item %q", k, ref))
 		}
+	}
+	if multiStep {
+		errs = append(errs, validateSteps(f.Steps, formKeys, f.Domains))
 	}
 
 	return errors.Join(errs...)

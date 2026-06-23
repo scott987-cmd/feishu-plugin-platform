@@ -100,5 +100,24 @@
       ] },
       "execute": { "url": "https://api.example.com/v1/records/{recordId}", "method": "PUT", "headers": { "Accept": "application/json" }, "bodyJson": { "status": "{status}" } }
     }
+  },
+  {
+    "nl": "先调接口换取临时 token,再用该 token 作 Bearer 头去查询数据(两步链式调用)",
+    "dsl": {
+      "id": "token-then-fetch",
+      "title": { "zh_CN": "取令牌后拉数据" },
+      "domains": ["api.example.com"],
+      "formItems": [
+        { "key": "query", "label": { "zh_CN": "查询关键词" }, "component": "FieldSelect", "supportType": ["Text"], "required": true }
+      ],
+      "result": { "kind": "object", "properties": [
+        { "key": "data", "type": "Text", "label": { "zh_CN": "查询结果" }, "primary": true, "expr": "res.result" },
+        { "key": "_id", "type": "Text", "label": { "zh_CN": "" }, "hidden": true, "groupByKey": true, "expr": "rand()" }
+      ] },
+      "steps": [
+        { "id": "auth", "url": "https://api.example.com/oauth/token", "method": "POST" },
+        { "id": "data", "url": "https://api.example.com/search?q={query}", "method": "GET", "headers": { "Authorization": "Bearer {auth.access_token}" } }
+      ]
+    }
   }
 ]

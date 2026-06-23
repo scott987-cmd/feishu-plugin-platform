@@ -214,6 +214,12 @@ func validateURLTemplate(u string, domains []string, formKeys map[string]bool) e
 			return fmt.Errorf("url placeholder {%s} references unknown form item", m[1])
 		}
 	}
+	return checkURLHost(u, domains)
+}
+
+// urlHost extracts the host from a URL template, ignoring scheme, path, query,
+// {placeholders}, and port; "" if it cannot be determined.
+func urlHost(u string) string {
 	host := u
 	if i := strings.Index(host, "://"); i >= 0 {
 		host = host[i+3:]
@@ -223,6 +229,13 @@ func validateURLTemplate(u string, domains []string, formKeys map[string]bool) e
 			host = host[:i]
 		}
 	}
+	return host
+}
+
+// checkURLHost verifies the URL's host is covered by the domains allowlist (the
+// SDK hard-rejects any fetch to a host outside addDomainList).
+func checkURLHost(u string, domains []string) error {
+	host := urlHost(u)
 	if host == "" {
 		return errors.New("cannot determine host")
 	}
