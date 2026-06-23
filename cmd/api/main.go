@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/dushibing/feishu-plugin-platform/internal/api"
+	"github.com/dushibing/feishu-plugin-platform/internal/auth"
 	"github.com/dushibing/feishu-plugin-platform/internal/generator"
 	"github.com/dushibing/feishu-plugin-platform/internal/httpx"
 	"github.com/dushibing/feishu-plugin-platform/internal/store"
@@ -38,9 +39,15 @@ func main() {
 		log.Printf("WARNING: ALLOWED_ORIGIN=* (open CORS) — set a specific origin in production")
 	}
 
-	srv := httpx.NewServer(":"+port, api.New(st, cfg).Routes())
-	log.Printf("api listening on :%s (generator=%s, serveWeb=%t, generateRPM=%d, auth=%t)",
-		port, cfg.GenURL, cfg.ServeWeb, cfg.GenerateRPM, cfg.APIToken != "")
+	server := api.New(st, cfg)
+	authn := buildAuth()
+	if authn != nil {
+		server = server.WithAuth(authn).WithPlugins(store.NewMemoryPluginStore())
+	}
+
+	srv := httpx.NewServer(":"+port, server.Routes())
+	log.Printf("api listening on :%s (generator=%s, serveWeb=%t, generateRPM=%d, auth=%t, login=%t)",
+		port, cfg.GenURL, cfg.ServeWeb, cfg.GenerateRPM, cfg.APIToken != "", authn != nil)
 	if err := httpx.Run(srv); err != nil {
 		log.Fatal(err)
 	}
@@ -62,6 +69,31 @@ func mustValidateConfig(cfg api.Config) {
 }
 
 func placeholder(v string) bool { return strings.Contains(v, "REPLACE_ME") }
+
+// buildAuth enables Feishu OAuth login (and per-user plugin ownership) when the
+// required config is present; otherwise the platform stays anonymous. Redirect
+// URI is taken from OAUTH_REDIRECT_URI, or derived from PLATFORM_BASE_URL.
+func buildAuth() *auth.Authenticator {
+	redirect := os.Getenv("OAUTH_REDIRECT_URI")
+	if redirect == "" {
+		if base := os.Getenv("PLATFORM_BASE_URL"); base != "" {
+			redirect = strings.TrimRight(base, "/") + "/auth/callback"
+		}
+	}
+	a, ok := auth.New(auth.Config{
+		AppID:         os.Getenv("FEISHU_APP_ID"),
+		AppSecret:     os.Getenv("FEISHU_APP_SECRET"),
+		BaseDomain:    getenv("FEISHU_BASE_DOMAIN", "feishu.cn"),
+		RedirectURI:   redirect,
+		SessionSecret: []byte(os.Getenv("SESSION_SECRET")),
+	})
+	if !ok {
+		log.Printf("login disabled (to enable: FEISHU_APP_ID/SECRET + SESSION_SECRET + OAUTH_REDIRECT_URI|PLATFORM_BASE_URL)")
+		return nil
+	}
+	log.Printf("login enabled (Feishu OAuth; redirect=%s)", redirect)
+	return a
+}
 
 // buildStore selects the persistence backend via STORE (memory|bitable). The
 // Bitable backend dogfoods the platform: definitions live in a 多维表格.

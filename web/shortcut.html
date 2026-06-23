@@ -106,6 +106,7 @@
     <div class="spacer"></div>
     <input id="token" class="tokin" placeholder="API Token(可选)" autocomplete="off"/>
     <span class="pill"><span class="dot"></span> basekit · 可审计源码</span>
+    <span id="user" class="pill"></span>
   </div>
 
   <div class="layout">
@@ -204,6 +205,7 @@ async function generate(){
     lastDSL = data.dsl;
     renderResult(data.dsl, data.indexTs || data.registerTs);
     $('#chip').style.display='';
+    await saveIfLoggedIn(); // logged in → 署名 + 归属到个人名下
   }catch(e){
     $('#result').innerHTML = '<div class="err"><b>生成失败:</b> '+esc(e.message)+'</div>';
   }finally{
@@ -261,6 +263,51 @@ function triggerDownload(blob, name){
   const url = URL.createObjectURL(blob); const a = document.createElement('a');
   a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 }
+
+// ── 身份 + 我的插件(per-user 归属;用飞书登录) ──
+let me = null; // {open_id, name} | null
+async function loadMe(){
+  try { const j = await (await fetch('/api/me')).json(); me = j.logged_in ? {open_id:j.open_id, name:j.name} : null; }
+  catch { me = null; }
+  renderUser();
+}
+function renderUser(){
+  const el = $('#user'); if(!el) return;
+  const a = 'color:#fff;text-decoration:underline;cursor:pointer';
+  if(!me){ el.innerHTML = `<a href="/auth/login" style="${a}">登录飞书</a>`; return; }
+  el.innerHTML = `你好 ${esc(me.name||'用户')} · <a id="myBtn" style="${a}">我的插件</a> · <a id="logoutBtn" style="${a}">退出</a>`;
+  $('#myBtn').onclick = () => showMyPlugins();
+  $('#logoutBtn').onclick = async () => { await fetch('/auth/logout',{method:'POST'}); me=null; renderUser(); };
+}
+// 生成成功后:把创建者写进 DSL(署名→渲染头/dsl.json/工程),并归属保存到个人名下。
+async function saveIfLoggedIn(){
+  if(!me || !lastDSL) return;
+  lastDSL.createdBy = { open_id: me.open_id, name: me.name };
+  try {
+    const title = (lastDSL.title && lastDSL.title.zh_CN) || lastDSL.id || '插件';
+    await fetch('/api/my/plugins', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({title, kind:mode, dsl:lastDSL})});
+  } catch {}
+}
+async function showMyPlugins(){
+  const res = $('#result');
+  res.innerHTML = '<div class="state"><span class="spin" style="border-color:rgba(15,110,86,.3);border-top-color:var(--brand)"></span><div>加载我的插件…</div></div>';
+  try {
+    const list = await (await fetch('/api/my/plugins')).json();
+    if(!Array.isArray(list) || !list.length){ res.innerHTML = '<div class="state"><div>还没有保存的插件。生成一个,即自动署名并归属到你名下。</div></div>'; return; }
+    res.innerHTML = `<div class="summary"><div class="sumcard full"><div class="k">我的插件(${list.length})</div><div class="v" id="mylist"></div></div></div>`;
+    const box = $('#mylist');
+    list.forEach(rec => {
+      const row = document.createElement('div'); row.className='io';
+      row.innerHTML = `<b>${esc(rec.title||rec.id)}</b> <code>${esc(rec.kind)}</code> <span style="color:var(--muted)">${esc(String(rec.created_at||'').slice(0,10))}</span> `;
+      const open = document.createElement('button'); open.className='mini'; open.textContent='打开';
+      open.onclick = () => { mode = rec.kind; lastDSL = rec.dsl; renderResult(rec.dsl, '// 下载工程 (.zip) 即从该 DSL 生成可审计源码(含你的署名)'); };
+      const del = document.createElement('button'); del.className='mini'; del.textContent='删除';
+      del.onclick = async () => { await fetch('/api/my/plugins/'+rec.id, {method:'DELETE'}); showMyPlugins(); };
+      row.append(open, del); box.appendChild(row);
+    });
+  } catch(e){ res.innerHTML = '<div class="err">加载失败: '+esc(e.message)+'</div>'; }
+}
+loadMe();
 
 $('#gen').onclick = generate;
 $('#prompt').addEventListener('keydown', e => { if((e.metaKey||e.ctrlKey) && e.key==='Enter') generate(); });

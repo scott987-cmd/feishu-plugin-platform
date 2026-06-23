@@ -178,6 +178,20 @@ PORT=8080 GENERATOR_URL=http://localhost:8090 WEB_DIR=./web go run ./cmd/api
 
 Open <http://localhost:8080/shortcut.html> — toggle between **字段捷径 / 自动化**, type a request, click 一键生成, review the **auditable source**, and download the project `.zip` (or just the DSL `.json`).
 
+### User login & per-user ownership (optional)
+
+Each person can sign in **with their own Feishu identity** so the plugins they create are **attributed to and owned by them** (a creator line is rendered into the source + `dsl.json`, and each user sees only their own plugins under "我的插件"). Enable it by configuring Feishu OAuth on the platform:
+
+```bash
+FEISHU_APP_ID=cli_xxx FEISHU_APP_SECRET=xxx \
+  FEISHU_BASE_DOMAIN=feishu.cn \
+  OAUTH_REDIRECT_URI=https://your-host/auth/callback \
+  SESSION_SECRET="$(openssl rand -hex 32)" \
+  PORT=8080 GENERATOR_URL=http://localhost:8090 WEB_DIR=./web go run ./cmd/api
+```
+
+Register `OAUTH_REDIRECT_URI` in the Feishu app's redirect-URL allowlist. When unset, login is disabled and the platform stays anonymous (unchanged). Routes: `GET /auth/login`, `GET /auth/callback`, `POST /auth/logout`, `GET /api/me`, and the cookie-authed `GET/POST /api/my/plugins` + `DELETE /api/my/plugins/{id}`. Identity uses a stateless HMAC-signed session cookie; ownership defaults to an in-process store (per-user, isolated).
+
 To use Claude instead of DeepSeek:
 
 ```bash

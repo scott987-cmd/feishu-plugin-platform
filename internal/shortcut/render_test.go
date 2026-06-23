@@ -420,6 +420,24 @@ func TestUrlResultType(t *testing.T) {
 	}
 }
 
+func TestCreatorAttribution(t *testing.T) {
+	f := loadExchangeRate(t)
+	f.CreatedBy = &shortcut.Creator{OpenID: "ou_abc", Name: "张三"}
+	ts, err := shortcut.RenderIndexTS(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(ts, "// 创建者 / Created by: 张三 (ou_abc)") {
+		t.Errorf("attribution header missing:\n%s", ts[:200])
+	}
+	// no creator → no attribution line
+	f.CreatedBy = nil
+	ts, _ = shortcut.RenderIndexTS(f)
+	if strings.Contains(ts, "Created by:") {
+		t.Error("no creator should render no attribution line")
+	}
+}
+
 func TestMultiStepChain(t *testing.T) {
 	f := loadExchangeRate(t)
 	f.Auth = nil

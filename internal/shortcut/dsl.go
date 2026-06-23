@@ -34,6 +34,27 @@ type FieldShortcut struct {
 	Result    Result     `json:"result"`      // output (writeback) shape
 	Execute   Execute    `json:"execute"`     // single fetch + map plan (or omit and use Steps)
 	Steps     []Step     `json:"steps,omitempty"` // optional: ordered multi-step pipeline (chaining); mutually exclusive with Execute
+	CreatedBy *Creator   `json:"createdBy,omitempty"` // the Feishu user who created this (attribution; carried into the rendered source + dsl.json)
+}
+
+// Creator attributes a generated plugin to the Feishu user who created it.
+type Creator struct {
+	OpenID string `json:"open_id,omitempty"`
+	Name   string `json:"name,omitempty"`
+}
+
+// attributionComment renders the creator as an auditable source-header line, or "".
+func attributionComment(c *Creator) string {
+	if c == nil || strings.TrimSpace(c.Name) == "" && strings.TrimSpace(c.OpenID) == "" {
+		return ""
+	}
+	who := strings.TrimSpace(c.Name)
+	if who == "" {
+		who = c.OpenID
+	} else if c.OpenID != "" {
+		who = who + " (" + c.OpenID + ")"
+	}
+	return "// 创建者 / Created by: " + who + "\n"
 }
 
 // Auth declares a credential the shortcut's USER fills in (never hardcoded). The

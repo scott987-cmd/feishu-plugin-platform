@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dushibing/feishu-plugin-platform/internal/auth"
 	"github.com/dushibing/feishu-plugin-platform/internal/dsl"
 	"github.com/dushibing/feishu-plugin-platform/internal/store"
 )
@@ -43,6 +44,8 @@ type Server struct {
 	cfg     Config
 	client  *http.Client
 	limiter *rateLimiter
+	authn   *auth.Authenticator // nil = login disabled (platform stays anonymous)
+	plugins store.PluginStore   // per-user owned plugins (nil = ownership disabled)
 
 	readyMu   sync.Mutex
 	readyAt   time.Time
@@ -62,6 +65,12 @@ func New(s store.Store, cfg Config) *Server {
 		limiter: newRateLimiter(cfg.GenerateRPM),
 	}
 }
+
+// WithAuth attaches a Feishu OAuth authenticator (enables login + ownership). Chainable.
+func (s *Server) WithAuth(a *auth.Authenticator) *Server { s.authn = a; return s }
+
+// WithPlugins attaches the per-user plugin store (enables "my plugins"). Chainable.
+func (s *Server) WithPlugins(p store.PluginStore) *Server { s.plugins = p; return s }
 
 // Routes wires handlers and the middleware chain.
 func (s *Server) Routes() http.Handler {
@@ -85,6 +94,19 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/action/zip", func(w http.ResponseWriter, r *http.Request) {
 		s.proxyGenerator(w, r, "/action/zip")
 	})
+	// Identity (Feishu OAuth) + per-user plugin ownership. Registered only when
+	// login is configured; all are no-ops/anonymous otherwise.
+	if s.authn != nil {
+		mux.HandleFunc("GET /auth/login", s.handleAuthLogin)
+		mux.HandleFunc("GET /auth/callback", s.handleAuthCallback)
+		mux.HandleFunc("POST /auth/logout", s.handleAuthLogout)
+		mux.HandleFunc("GET /api/me", s.handleMe)
+		if s.plugins != nil {
+			mux.HandleFunc("GET /api/my/plugins", s.handleMyList)
+			mux.HandleFunc("POST /api/my/plugins", s.handleMySave)
+			mux.HandleFunc("DELETE /api/my/plugins/{id}", s.handleMyDelete)
+		}
+	}
 	if s.cfg.ServeWeb {
 		mux.Handle("GET /", http.FileServer(http.Dir(s.cfg.WebDir)))
 	}
@@ -302,7 +324,10 @@ func (s *Server) withCORS(next http.Handler) http.Handler {
 func (s *Server) withAuth(next http.Handler) http.Handler {
 	want := []byte("Bearer " + s.cfg.APIToken)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if s.cfg.APIToken != "" && strings.HasPrefix(r.URL.Path, "/api/") && r.Method != http.MethodOptions {
+		// /api/me and /api/my/* authenticate the END USER via the session cookie
+		// (set by the OAuth flow), not the shared machine token — exempt them here.
+		userScoped := r.URL.Path == "/api/me" || strings.HasPrefix(r.URL.Path, "/api/my/")
+		if s.cfg.APIToken != "" && strings.HasPrefix(r.URL.Path, "/api/") && !userScoped && r.Method != http.MethodOptions {
 			got := []byte(r.Header.Get("Authorization"))
 			if subtle.ConstantTimeCompare(got, want) != 1 {
 				writeErr(w, http.StatusUnauthorized, "unauthorized")
