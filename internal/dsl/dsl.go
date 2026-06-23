@@ -4,6 +4,7 @@
 package dsl
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -53,6 +54,17 @@ type Component struct {
 	Col       string   `json:"col,omitempty"`     // pivot only: column group-by field (row uses x)
 	Sort      string   `json:"sort,omitempty"`    // chart only: asc | desc (TopN with limit)
 	Limit     int      `json:"limit,omitempty"`   // chart only: take top N groups
+
+	// enrich only: for each visible record, send the InputField cell as the
+	// FormKey input to the self-hosted execute-runtime (POST /api/execute) and
+	// render the mapped result. ExecuteDSL is the inline field-shortcut DSL —
+	// opaque here (kept as raw JSON); the runner re-validates it. This is the
+	// red-zone "call an external API per row" capability, run on our own backend
+	// (no Feishu FaaS). See EXECUTE_RUNTIME.md.
+	InputField string          `json:"inputField,omitempty"` // host column whose cell is the execute input
+	FormKey    string          `json:"formKey,omitempty"`    // the field-shortcut formItem key InputField maps to
+	ExecuteDSL json.RawMessage `json:"executeDsl,omitempty"` // inline field-shortcut DSL (runner validates)
+	OutputKeys []string        `json:"outputKeys,omitempty"` // result property keys to show (omit = all)
 }
 
 // AggSpec is an aggregation over a field, used e.g. as a chart's Y axis.
@@ -76,7 +88,7 @@ type Action struct {
 // LLM/template output and refuse anything off-schema before it is stored.
 var (
 	ValidTypes      = []string{"view_extension", "automation"}
-	ValidComponents = []string{"stat", "chart", "table", "text", "gauge", "pivot", "timeline", "kanban", "countdown", "markdown", "gallery", "calendar"}
+	ValidComponents = []string{"stat", "chart", "table", "text", "gauge", "pivot", "timeline", "kanban", "countdown", "markdown", "gallery", "calendar", "enrich"}
 	ValidAggs       = []string{"sum", "count", "avg", "max", "min", "median", "distinct", "range", "stddev"}
 	ValidCharts     = []string{"bar", "line", "pie"}
 	ValidActions    = []string{"exportXlsx", "notify"}
@@ -159,6 +171,25 @@ func (d AppDefinition) Validate() error {
 		}
 		if c.Sort != "" && !slices.Contains(ValidSorts, c.Sort) {
 			errs = append(errs, fmt.Errorf("components[%d].sort %q invalid (want one of: %s)", i, c.Sort, strings.Join(ValidSorts, ", ")))
+		}
+		if c.Type == "enrich" {
+			if strings.TrimSpace(c.InputField) == "" {
+				errs = append(errs, fmt.Errorf("components[%d] is enrich but inputField is empty", i))
+			}
+			if strings.TrimSpace(c.FormKey) == "" {
+				errs = append(errs, fmt.Errorf("components[%d] is enrich but formKey is empty", i))
+			}
+			if len(c.ExecuteDSL) == 0 {
+				errs = append(errs, fmt.Errorf("components[%d] is enrich but executeDsl is empty", i))
+			} else if !json.Valid(c.ExecuteDSL) {
+				errs = append(errs, fmt.Errorf("components[%d].executeDsl is not valid JSON", i))
+			}
+			if len(c.InputField) > MaxStrLen || len(c.FormKey) > MaxStrLen {
+				errs = append(errs, fmt.Errorf("components[%d] enrich inputField/formKey too long", i))
+			}
+			if len(c.OutputKeys) > MaxColumns {
+				errs = append(errs, fmt.Errorf("components[%d].outputKeys too many (%d > %d)", i, len(c.OutputKeys), MaxColumns))
+			}
 		}
 	}
 	if len(d.Actions) > MaxActions {

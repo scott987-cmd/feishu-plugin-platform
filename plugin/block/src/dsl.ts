@@ -12,7 +12,7 @@ export type AppType = "view_extension" | "automation";
  *  kanban=只读看板(按 x 分列),countdown=倒计时(text=目标时间),markdown=富文本(text,安全解析) */
 export type ComponentType =
   | "stat" | "chart" | "table" | "text" | "gauge" | "pivot" | "timeline"
-  | "kanban" | "countdown" | "markdown" | "gallery" | "calendar";
+  | "kanban" | "countdown" | "markdown" | "gallery" | "calendar" | "enrich";
 
 /** 聚合方式 — Go: ValidAggs。median=中位数,distinct=去重计数,range=极差,stddev=标准差 */
 export type Agg = "sum" | "count" | "avg" | "max" | "min" | "median" | "distinct" | "range" | "stddev";
@@ -76,6 +76,13 @@ export interface Component {
   sort?: "asc" | "desc";
   /** CHART only: 取前 N 组(配合 sort)。 */
   limit?: number;
+  /** ENRICH only: 对每条可见记录,把 inputField 列的值作为 formKey 入参调
+   *  /api/execute(自托管 execute 运行时),渲染映射结果。executeDsl=内联字段捷径
+   *  DSL(透传给 runner 校验执行);outputKeys=要展示的结果列(省略=全部)。 */
+  inputField?: string;
+  formKey?: string;
+  executeDsl?: unknown;
+  outputKeys?: string[];
 }
 
 /**
@@ -115,7 +122,7 @@ export interface AppDefinition {
 
 // 与 Go 端 dsl.go 同步的枚举常量 (用于运行时校验/UI 提示)。
 export const VALID_TYPES: AppType[] = ["view_extension", "automation"];
-export const VALID_COMPONENTS: ComponentType[] = ["stat", "chart", "table", "text", "gauge", "pivot", "timeline", "kanban", "countdown", "markdown", "gallery", "calendar"];
+export const VALID_COMPONENTS: ComponentType[] = ["stat", "chart", "table", "text", "gauge", "pivot", "timeline", "kanban", "countdown", "markdown", "gallery", "calendar", "enrich"];
 export const VALID_AGGS: Agg[] = ["sum", "count", "avg", "max", "min", "median", "distinct", "range", "stddev"];
 export const VALID_CHARTS: ChartType[] = ["bar", "line", "pie"];
 export const VALID_ACTIONS: DoAction[] = ["exportXlsx", "notify"];

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAsync } from 'react-async-hook';
-import { getApp, listApps } from './api';
+import { getApp, listApps, execute } from './api';
 import { readHostData, aggregate, groupAggregate } from './bitableData';
 import { resolveColumns, pivot, sortLimit } from './ops';
 import { toLabel, toNumber } from './cellValue';
@@ -581,6 +581,79 @@ const CalendarTile: Renderer = ({ c, records }) => {
 
 // 渲染器层(两层解释器之二)。加视图/图表 = 在此注册一个渲染器(并在 dsl 的 ComponentType 枚举登记),
 // 容器解释器本体不变,故只审一次。键须与 dsl.VALID_COMPONENTS 对应。
+// EnrichTile — 红区能力的演示渲染器:对每条可见记录,把 inputField 列的值作为
+// formKey 入参调自托管 execute 运行时(POST /api/execute),把映射结果渲染成一行。
+// 这是私有化下「字段捷径调外部 API」的真实闭环:数据来自我们 k8s 上的 execute-runner,
+// 不经飞书 FaaS。每行一次调用,封顶 ENRICH_CAP 行避免打爆下游。
+const ENRICH_CAP = 20;
+
+const EnrichTile: Renderer = ({ c, records }) => {
+  const inputField = c.inputField ?? '';
+  const formKey = c.formKey ?? '';
+  const rows = records.slice(0, ENRICH_CAP);
+  const res = useAsync(async () => {
+    if (!c.executeDsl || !inputField || !formKey) {
+      throw new Error('enrich 组件缺少 executeDsl / inputField / formKey');
+    }
+    return Promise.all(
+      rows.map(async (r) => {
+        const input = toLabel(r[inputField]);
+        if (!input) return { input: '', data: {} as Record<string, unknown> };
+        try {
+          const data = await execute(c.executeDsl, { [formKey]: input });
+          return { input, data };
+        } catch (e) {
+          return { input, data: { __error: (e as Error).message } as Record<string, unknown> };
+        }
+      }),
+    );
+  }, []);
+
+  // 输出列:优先 outputKeys;否则从首个成功结果推断(排除内部键 _id / __error)。
+  const outCols: string[] = (() => {
+    if (c.outputKeys && c.outputKeys.length) return c.outputKeys;
+    const sample = (res.result ?? []).find((x) => x.data && !x.data.__error && Object.keys(x.data).length);
+    return sample ? Object.keys(sample.data).filter((k) => k !== '_id' && k !== '__error') : [];
+  })();
+
+  return (
+    <div className="tile wide">
+      <div className="ttl">
+        {c.title ?? ''}
+        <span className="tag">enrich · execute-runtime</span>
+        <span className="axis">{`${rows.length} 行`}</span>
+      </div>
+      {res.loading ? (
+        <div className="nodata" style={{ height: 'auto', padding: '28px 0' }}>正在调用自托管 execute 运行时…</div>
+      ) : res.error ? (
+        <div className="warn" style={{ marginTop: 12 }}>{String((res.error as Error).message || res.error)}</div>
+      ) : (
+        <div className="tblw">
+          <table className="tbl">
+            <thead>
+              <tr><th>{inputField}</th>{outCols.map((k, i) => <th key={i}>{k}</th>)}</tr>
+            </thead>
+            <tbody>
+              {(res.result ?? []).map((row, ri) => (
+                <tr key={ri}>
+                  <td title={row.input}>{row.input}</td>
+                  {row.data.__error ? (
+                    <td colSpan={Math.max(outCols.length, 1)} className="lab" style={{ color: 'var(--warn-ink)' }}>
+                      {toLabel(row.data.__error)}
+                    </td>
+                  ) : (
+                    outCols.map((k, ci) => <td key={ci} title={toLabel(row.data[k])}>{toLabel(row.data[k])}</td>)
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const renderers: Record<string, Renderer> = {
   stat: StatTile,
   chart: ChartTile,
@@ -594,6 +667,7 @@ const renderers: Record<string, Renderer> = {
   gallery: GalleryTile,
   calendar: CalendarTile,
   text: TextTile,
+  enrich: EnrichTile,
 };
 
 const Comp: Renderer = ({ c, records }) => {

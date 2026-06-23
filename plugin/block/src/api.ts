@@ -80,3 +80,28 @@ export function getApp(id: string): Promise<AppDefinition> {
   if (!id) return Promise.reject(new Error("getApp: id 不能为空"));
   return getJSON<AppDefinition>(`/api/apps/${encodeURIComponent(id)}`);
 }
+
+/**
+ * 调用自托管 execute 运行时(替代私有化没有的飞书 FaaS)。对应 POST /api/execute
+ * (call-chain B:api 转发到内网 execute-runner)。dsl=内联字段捷径 DSL,
+ * inputs=表单取值。返回映射后的输出对象。详见 EXECUTE_RUNTIME.md。
+ */
+export async function execute(
+  dsl: unknown,
+  inputs: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const url = `${API_BASE}/api/execute`;
+  const headers: Record<string, string> = { "Content-Type": "application/json", Accept: "application/json" };
+  if (API_TOKEN) headers.Authorization = `Bearer ${API_TOKEN}`;
+  let resp: Response;
+  try {
+    resp = await fetch(url, { method: "POST", headers, body: JSON.stringify({ dsl, inputs }) });
+  } catch (e) {
+    throw new Error(`无法连接 execute 运行时 (${url}): ${(e as Error).message}`);
+  }
+  const body = (await resp.json().catch(() => ({}))) as { ok?: boolean; data?: Record<string, unknown>; error?: string };
+  if (!resp.ok || body.ok === false) {
+    throw new Error(body.error || `execute 失败 (HTTP ${resp.status})`);
+  }
+  return body.data ?? {};
+}
