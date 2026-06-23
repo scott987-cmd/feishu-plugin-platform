@@ -63,7 +63,7 @@ func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	s.setCookie(w, r, stateCookie, "", -1) // clear state
 	s.setCookie(w, r, sessionCookie, s.authn.Sign(user), s.authn.SessionMaxAge())
-	http.Redirect(w, r, "/", http.StatusFound)
+	http.Redirect(w, r, "/shortcut.html", http.StatusFound) // back to the generator platform
 }
 
 // handleAuthLogout clears the session.
