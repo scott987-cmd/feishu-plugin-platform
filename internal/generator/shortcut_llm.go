@@ -32,7 +32,7 @@ const (
 		"(3b) CONDITIONALS — there are NO raw comparison operators (you may NOT write <, >, ==, ?, :, &&, ||, !). Use these FUNCTIONS instead: comparison eq(a,b)/ne(a,b)/gt(a,b)/gte(a,b)/lt(a,b)/lte(a,b) (return true/false), boolean and(…)/or(…)/not(x), branching if(cond, thenValue, elseValue), coalesce(a,b,…) (first non-empty), default(v, fallback). Examples: `if(gt(in.score, 90), 'A', 'B')` · `if(eq(substr(in.idcard,16,1) % 2, 1), '男', '女')` (ID-card gender by parity of the 17th digit) · `if(and(gte(in.age,18), lt(in.age,60)), '劳动年龄', '其他')` · `coalesce(res.data.name, '未知')`. " +
 		"Examples: `in.account * res.rates.USD` , `res.data.title` , `rand()`. " +
 		"(4) Include one hidden Text property with isGroupByKey via groupByKey=true and expr `rand()` as a stable row id. " +
-		"(5) execute.url may contain {formItemKey} placeholders. For a POST API, set method=POST. Flat body → execute.body (field→value, \"{formKey}\" injects input). NESTED/structured body (AI chat completions etc., e.g. messages array) → execute.bodyJson with the full JSON shape, putting \"{formKey}\" where an input goes (e.g. content). For AI APIs that need a Bearer key, also add auth HeaderBearerToken. " +
+		"(5) execute.url may contain {formItemKey} placeholders. method: GET to read; POST/PUT/PATCH to send a body; DELETE to remove. Flat body → execute.body (field→value, \"{formKey}\" injects input). NESTED/structured body (AI chat completions etc., e.g. messages array) → execute.bodyJson with the full JSON shape, putting \"{formKey}\" where an input goes (e.g. content). Extra request headers (Accept, X-API-Version, etc.) → execute.headers (\"{formKey}\" injects input, else literal); do NOT set Content-Type or the auth header (added automatically). For AI APIs that need a Bearer key, also add auth HeaderBearerToken. " +
 		"(5b) NO-FETCH plugins (omit `execute` and `domains` entirely): two sub-cases. " +
 		"(i) `template` is ONLY for inserting inputs VERBATIM into literal text — URL construction (QR/chart/image generators like api.qrserver.com) or raw concatenation, e.g. template \"https://api.qrserver.com/v1/create-qr-code/?data={text}\". A template does NOT transform its inputs. " +
 		"(ii) For any TRANSFORMATION of the input — uppercase, lowercase, trim, substring, replace, length, etc. — DO NOT use a template; use `expr` with the matching function, e.g. expr upper(in.text) / trim(in.text) / substr(in.idcard, 6, 8) / concat(in.last, in.first). Never invent res.<path> for a no-fetch plugin. " +
@@ -132,7 +132,12 @@ func fieldShortcutSchema() map[string]any {
 					},
 					"bodyJson": map[string]any{
 						"type":        "object",
-						"description": "POST only, STRUCTURED/NESTED body (use for AI chat APIs etc., e.g. {\"model\":\"deepseek-chat\",\"messages\":[{\"role\":\"user\",\"content\":\"…{text}…\"}]}). Give the full JSON shape; string values may contain {inputKey} placeholders. Use this instead of `body` when the body is not flat.",
+						"description": "POST/PUT/PATCH only, STRUCTURED/NESTED body (use for AI chat APIs etc., e.g. {\"model\":\"deepseek-chat\",\"messages\":[{\"role\":\"user\",\"content\":\"…{text}…\"}]}). Give the full JSON shape; string values may contain {inputKey} placeholders. Use this instead of `body` when the body is not flat.",
+					},
+					"headers": map[string]any{
+						"type":                 "object",
+						"description":          "optional extra request headers (e.g. Accept, X-API-Version); value \"{formKey}\" injects an input, else literal. Do NOT set Content-Type or the auth header — those are added automatically.",
+						"additionalProperties": map[string]any{"type": "string"},
 					},
 				},
 			},

@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 )
 
@@ -180,12 +179,12 @@ func (a Action) Validate() error {
 	} else if err := validateURLTemplate(a.Execute.URL, a.Domains, inputKeys); err != nil {
 		errs = append(errs, fmt.Errorf("execute.url: %w", err))
 	}
-	if a.Execute.Method != "GET" && a.Execute.Method != "POST" {
-		errs = append(errs, fmt.Errorf("execute.method %q invalid (want GET|POST)", a.Execute.Method))
+	if !slices.Contains(ValidMethods, a.Execute.Method) {
+		errs = append(errs, fmt.Errorf("execute.method %q invalid (want %s)", a.Execute.Method, strings.Join(ValidMethods, ", ")))
 	}
 	if len(a.Execute.Body) > 0 {
-		if a.Execute.Method != "POST" {
-			errs = append(errs, errors.New("execute.body is only valid when method is POST"))
+		if !methodHasBody(a.Execute.Method) {
+			errs = append(errs, errors.New("execute.body is only valid for POST/PUT/PATCH"))
 		}
 		for k, v := range a.Execute.Body {
 			if !keyRe.MatchString(k) {
@@ -194,6 +193,25 @@ func (a Action) Validate() error {
 			if ref := bodyRef(v); ref != "" && !inputKeys[ref] {
 				errs = append(errs, fmt.Errorf("execute.body[%s] references unknown input %q", k, ref))
 			}
+		}
+	}
+	if len(a.Execute.BodyJSON) > 0 {
+		if !methodHasBody(a.Execute.Method) {
+			errs = append(errs, errors.New("execute.bodyJson is only valid for POST/PUT/PATCH"))
+		}
+		if len(a.Execute.Body) > 0 {
+			errs = append(errs, errors.New("set either execute.body or execute.bodyJson, not both"))
+		}
+		if err := validateBodyJSON(a.Execute.BodyJSON, inputKeys); err != nil {
+			errs = append(errs, fmt.Errorf("execute.bodyJson: %w", err))
+		}
+	}
+	for k, v := range a.Execute.Headers {
+		if !paramNameRe.MatchString(k) {
+			errs = append(errs, fmt.Errorf("execute.headers key %q invalid (header-name chars only)", k))
+		}
+		if ref := bodyRef(v); ref != "" && !inputKeys[ref] {
+			errs = append(errs, fmt.Errorf("execute.headers[%s] references unknown input %q", k, ref))
 		}
 	}
 	return errors.Join(errs...)
@@ -249,25 +267,9 @@ func RenderActionTS(a Action) (string, error) {
 	emitExprHelpers(&b, "    ", actVals)
 	b.WriteString(actionHelpers)
 	w("    try {\n")
-	initObj := fmt.Sprintf("{ method: %s }", jsStr(a.Execute.Method))
-	if len(a.Execute.Body) > 0 {
-		bodyKeys := make([]string, 0, len(a.Execute.Body))
-		for k := range a.Execute.Body {
-			bodyKeys = append(bodyKeys, k)
-		}
-		sort.Strings(bodyKeys)
-		parts := make([]string, len(bodyKeys))
-		for i, k := range bodyKeys {
-			v := a.Execute.Body[k]
-			if ref := bodyRef(v); ref != "" {
-				parts[i] = fmt.Sprintf("%s: args.%s", k, ref)
-			} else {
-				parts[i] = fmt.Sprintf("%s: %s", k, jsStr(v))
-			}
-		}
-		initObj = fmt.Sprintf("{ method: %s, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ %s }) }",
-			jsStr(a.Execute.Method), strings.Join(parts, ", "))
-	}
+	// Reuse the shared fetch-init renderer (method + headers + flat/structured body),
+	// then rebind input refs from `inp.` to `args.` (the action execute param).
+	initObj := strings.ReplaceAll(renderFetchInit(a.Execute), "inp.", "args.")
 	// URL placeholders bind to `args` (the action execute param), not `inp`.
 	actionURL := strings.ReplaceAll(renderURLTemplate(a.Execute.URL), "${inp.", "${args.")
 	w("      const res: any = await fetch(`%s`, %s);\n", actionURL, initObj)

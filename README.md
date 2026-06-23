@@ -46,7 +46,7 @@ Two generators, both targeting the official SDK `@lark-opdev/block-basekit-serve
 Pick input column(s) → call one external API → write back one or more output columns.
 
 - **4 auth types** the end-user fills in at config time (never hardcoded): `HeaderBearerToken`, `QueryParamToken`, `CustomHeaderToken`, `Basic`
-- `GET` / `POST` with a JSON body
+- `GET` / `POST` / `PUT` / `PATCH` / `DELETE` (read or write external systems), with flat or **nested JSON bodies** (`bodyJson`) and optional **custom request headers**
 - **Expression mapping** over two namespaces: `in.<inputKey>` (inputs) and `res.<dotted.json.path>` (response), plus `+ - * / % ( )`, array indices (`res.list.0.x`), `rand()`, string/number functions (`concat`/`upper`/`trim`/`substr`/`round`/`floor`/…), and **conditional logic in function form** — `eq`/`gt`/`and`/`if(cond,a,b)`/`coalesce` — so branching needs no raw `< > = ? :` operators
 - Multi-property **Object result** (several derived columns at once) with optional `NumberFormatter`
 
@@ -86,7 +86,7 @@ produces this DSL (the LLM's structured intermediate form)…
 
 Configure inputs → call one external API → return a result object that **downstream automation steps consume**.
 
-- `APIKey` auth (runtime-injected), `GET` / `POST` + body
+- `APIKey` auth (runtime-injected), `GET`/`POST`/`PUT`/`PATCH`/`DELETE` + flat or nested (`bodyJson`) body + custom headers
 - Same `expr` grammar (`in.<inputKey>`, `res.<json.path>`, arithmetic, functions, `if`/`eq`/`gt`… conditionals, `rand()`)
 - Result is a plain object keyed by your output keys, with a typed `resultType`
 

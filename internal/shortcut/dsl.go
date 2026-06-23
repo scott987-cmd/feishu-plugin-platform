@@ -96,16 +96,25 @@ type ResultProp struct {
 // Execute is the (single) outbound request the shortcut performs before mapping.
 type Execute struct {
 	URL    string `json:"url"`    // may contain {formKey} placeholders
-	Method string `json:"method"` // GET | POST
-	// BodyJSON is a structured/nested POST body (e.g. AI chat: {"model":…,
+	Method string `json:"method"` // GET | POST | PUT | PATCH | DELETE
+	// BodyJSON is a structured/nested body (e.g. AI chat: {"model":…,
 	// "messages":[{"role":"user","content":"…{text}…"}]}). String values may hold
 	// {formKey} placeholders. Use this instead of Body for non-flat bodies.
+	// Valid for body-carrying methods (POST/PUT/PATCH).
 	BodyJSON json.RawMessage `json:"bodyJson,omitempty"`
-	// Body is the POST JSON body: field name → value. A value that is exactly
+	// Body is the flat JSON body: field name → value. A value that is exactly
 	// "{formKey}" injects that input; anything else is a literal string. Only
-	// valid when Method is POST. Sent as application/json.
+	// valid for body-carrying methods (POST/PUT/PATCH). Sent as application/json.
 	Body map[string]string `json:"body,omitempty"`
+	// Headers are extra request headers: name → value. A value of exactly
+	// "{formKey}" injects that input; anything else is a literal string. The
+	// Content-Type for a body and the runtime-injected auth header are added
+	// automatically and take precedence — do not set them here.
+	Headers map[string]string `json:"headers,omitempty"`
 }
+
+// methodHasBody reports whether m is an HTTP method that may carry a request body.
+func methodHasBody(m string) bool { return m == "POST" || m == "PUT" || m == "PATCH" }
 
 // Allowed enum values, kept explicit so LLM/DSL output can be validated and
 // refused before we render any TypeScript.
@@ -113,7 +122,7 @@ var (
 	ValidComponents  = []string{"FieldSelect", "Input", "SingleSelect"}
 	ValidFieldTypes  = []string{"Number", "Text", "DateTime", "SingleSelect", "Checkbox"}
 	ValidResultKinds = []string{"object"}
-	ValidMethods     = []string{"GET", "POST"}
+	ValidMethods     = []string{"GET", "POST", "PUT", "PATCH", "DELETE"}
 	// Authorization types we render + verify (subset of the SDK's 8 — the ones
 	// that cover the vast majority of real APIs).
 	ValidAuthTypes = []string{"HeaderBearerToken", "QueryParamToken", "CustomHeaderToken", "Basic"}
@@ -260,8 +269,8 @@ func (f FieldShortcut) Validate() error {
 		}
 	}
 	if len(f.Execute.Body) > 0 {
-		if f.Execute.Method != "POST" {
-			errs = append(errs, errors.New("execute.body is only valid when method is POST"))
+		if !methodHasBody(f.Execute.Method) {
+			errs = append(errs, errors.New("execute.body is only valid for POST/PUT/PATCH"))
 		}
 		for k, v := range f.Execute.Body {
 			if !keyRe.MatchString(k) {
@@ -277,14 +286,25 @@ func (f FieldShortcut) Validate() error {
 		}
 	}
 	if len(f.Execute.BodyJSON) > 0 {
-		if f.Execute.Method != "POST" {
-			errs = append(errs, errors.New("execute.bodyJson is only valid when method is POST"))
+		if !methodHasBody(f.Execute.Method) {
+			errs = append(errs, errors.New("execute.bodyJson is only valid for POST/PUT/PATCH"))
 		}
 		if len(f.Execute.Body) > 0 {
 			errs = append(errs, errors.New("set either execute.body or execute.bodyJson, not both"))
 		}
 		if err := validateBodyJSON(f.Execute.BodyJSON, formKeys); err != nil {
 			errs = append(errs, fmt.Errorf("execute.bodyJson: %w", err))
+		}
+	}
+	for k, v := range f.Execute.Headers {
+		if !paramNameRe.MatchString(k) {
+			errs = append(errs, fmt.Errorf("execute.headers key %q invalid (header-name chars only)", k))
+		}
+		if len(v) > MaxStrLen {
+			errs = append(errs, fmt.Errorf("execute.headers[%s] too long", k))
+		}
+		if ref := bodyRef(v); ref != "" && !formKeys[ref] {
+			errs = append(errs, fmt.Errorf("execute.headers[%s] references unknown form item %q", k, ref))
 		}
 	}
 

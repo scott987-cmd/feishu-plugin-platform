@@ -100,6 +100,8 @@ func TestActionRejections(t *testing.T) {
 		{"expr unknown input", func(a *shortcut.Action) { a.Result[0].Expr = "in.nope * 2" }},
 		{"host not in domains", func(a *shortcut.Action) { a.Execute.URL = "https://evil.com/x" }},
 		{"body on GET", func(a *shortcut.Action) { a.Execute.Body = map[string]string{"x": "1"} }},
+		{"bodyJson on DELETE", func(a *shortcut.Action) { a.Execute.Method = "DELETE"; a.Execute.BodyJSON = []byte(`{"x":"1"}`) }},
+		{"headers unknown input", func(a *shortcut.Action) { a.Execute.Headers = map[string]string{"X-Id": "{nope}"} }},
 	}
 	for _, c := range cases {
 		a := validAction()
@@ -110,5 +112,42 @@ func TestActionRejections(t *testing.T) {
 		if err := a.Validate(); err == nil {
 			t.Errorf("%s: expected validation error, got nil", c.name)
 		}
+	}
+}
+
+func TestActionWritePathPatchBodyJSON(t *testing.T) {
+	a := validAction()
+	a.Domains = []string{"api.example.com"}
+	a.Inputs = []shortcut.ActionInput{
+		{Key: "ticketId", Label: "工单ID", Required: true},
+		{Key: "status", Label: "新状态", Required: true},
+	}
+	a.Result = []shortcut.ActionOutput{{Key: "ok", Label: "结果", Type: "Text", Expr: "res.status"}}
+	a.Execute = shortcut.Execute{
+		URL: "https://api.example.com/tickets/{ticketId}", Method: "PATCH",
+		Headers:  map[string]string{"X-Api-Version": "v2"},
+		BodyJSON: []byte(`{"status":"{status}"}`),
+	}
+	if err := a.Validate(); err != nil {
+		t.Fatalf("action PATCH + bodyJson + headers should validate, got: %v", err)
+	}
+	ts, err := shortcut.RenderActionTS(a)
+	if err != nil {
+		t.Fatalf("render failed: %v", err)
+	}
+	for _, w := range []string{
+		"method: 'PATCH'",
+		"'Content-Type': 'application/json'",
+		"'X-Api-Version': 'v2'",
+		"${args.status}", // bodyJson input refs rebind inp.→args. for actions
+		"await fetch(`https://api.example.com/tickets/${args.ticketId}`",
+	} {
+		if !strings.Contains(ts, w) {
+			t.Errorf("action write-path render missing:\n  %s\n--- got ---\n%s", w, ts)
+		}
+	}
+	// the action source must never carry the field `inp.` binding.
+	if strings.Contains(ts, "inp.") {
+		t.Errorf("action render leaked the inp. binding:\n%s", ts)
 	}
 }

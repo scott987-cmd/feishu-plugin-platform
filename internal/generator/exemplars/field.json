@@ -82,5 +82,23 @@
         { "key": "_id", "type": "Text", "label": { "zh_CN": "" }, "hidden": true, "groupByKey": true, "expr": "rand()" }
       ] }
     }
+  },
+  {
+    "nl": "把记录状态写回外部系统(REST PUT 更新,需 Bearer Token,带自定义请求头和结构化请求体)",
+    "dsl": {
+      "id": "update-record",
+      "title": { "zh_CN": "更新外部记录" },
+      "domains": ["api.example.com"],
+      "auth": { "id": "apiToken", "type": "HeaderBearerToken", "label": "API Token", "platform": "Your System", "instructionsUrl": "https://example.com/api-keys" },
+      "formItems": [
+        { "key": "recordId", "label": { "zh_CN": "记录ID" }, "component": "FieldSelect", "supportType": ["Text"], "required": true },
+        { "key": "status", "label": { "zh_CN": "新状态" }, "component": "FieldSelect", "supportType": ["Text"], "required": true }
+      ],
+      "result": { "kind": "object", "properties": [
+        { "key": "ok", "type": "Text", "label": { "zh_CN": "更新结果" }, "primary": true, "expr": "res.status" },
+        { "key": "_id", "type": "Text", "label": { "zh_CN": "" }, "hidden": true, "groupByKey": true, "expr": "rand()" }
+      ] },
+      "execute": { "url": "https://api.example.com/v1/records/{recordId}", "method": "PUT", "headers": { "Accept": "application/json" }, "bodyJson": { "status": "{status}" } }
+    }
   }
 ]

@@ -12,5 +12,21 @@
       ],
       "execute": { "url": "https://api.exchangerate-api.com/v4/latest/CNY", "method": "GET" }
     }
+  },
+  {
+    "nl": "自动化:把工单状态更新写回外部工单系统(PATCH,结构化请求体)",
+    "dsl": {
+      "id": "update-ticket-action",
+      "title": { "zh_CN": "更新工单动作" },
+      "domains": ["api.example.com"],
+      "inputs": [
+        { "key": "ticketId", "label": "工单ID", "required": true },
+        { "key": "status", "label": "新状态", "required": true }
+      ],
+      "result": [
+        { "key": "ok", "label": "更新结果", "type": "Text", "expr": "res.status" }
+      ],
+      "execute": { "url": "https://api.example.com/v1/tickets/{ticketId}", "method": "PATCH", "bodyJson": { "status": "{status}" } }
+    }
   }
 ]

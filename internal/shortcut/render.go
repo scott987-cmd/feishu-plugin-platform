@@ -24,13 +24,54 @@ func jsStr(s string) string {
 	return "'" + r.Replace(s) + "'"
 }
 
-// renderBodyValue lowers a POST body value to JS: "{key}" → inp.key (input
+// renderBodyValue lowers a body/header value to JS: "{key}" → inp.key (input
 // injection), otherwise a quoted string literal.
 func renderBodyValue(v string) string {
 	if ref := bodyRef(v); ref != "" {
 		return "inp." + ref
 	}
 	return jsStr(v)
+}
+
+func sortedStrKeys(m map[string]string) []string {
+	ks := make([]string, 0, len(m))
+	for k := range m {
+		ks = append(ks, k)
+	}
+	sort.Strings(ks)
+	return ks
+}
+
+// renderFetchInit builds the JS fetch init object: method, optional merged
+// headers (custom headers + Content-Type when a body is present), and an optional
+// body (flat or structured). Input refs use the `inp.` binding; the action
+// renderer rebinds them to `args.`. Output is deterministic (sorted keys).
+func renderFetchInit(e Execute) string {
+	parts := []string{fmt.Sprintf("method: %s", jsStr(e.Method))}
+
+	var hdr []string
+	if len(e.Body) > 0 || len(e.BodyJSON) > 0 {
+		hdr = append(hdr, "'Content-Type': 'application/json'")
+	}
+	for _, k := range sortedStrKeys(e.Headers) {
+		hdr = append(hdr, fmt.Sprintf("%s: %s", jsStr(k), renderBodyValue(e.Headers[k])))
+	}
+	if len(hdr) > 0 {
+		parts = append(parts, "headers: { "+strings.Join(hdr, ", ")+" }")
+	}
+
+	if len(e.Body) > 0 {
+		bp := make([]string, 0, len(e.Body))
+		for _, k := range sortedStrKeys(e.Body) {
+			bp = append(bp, fmt.Sprintf("%s: %s", k, renderBodyValue(e.Body[k])))
+		}
+		parts = append(parts, "body: JSON.stringify({ "+strings.Join(bp, ", ")+" })")
+	} else if len(e.BodyJSON) > 0 {
+		if bj, err := renderBodyJSON(e.BodyJSON); err == nil {
+			parts = append(parts, "body: JSON.stringify("+bj+")")
+		}
+	}
+	return "{ " + strings.Join(parts, ", ") + " }"
 }
 
 // renderPropValue lowers a result property's value to JS: a template renders as
@@ -206,27 +247,8 @@ func RenderIndexTS(f FieldShortcut) (string, error) {
 	b.WriteString(executeHelpers)
 	w("    try {\n")
 	if strings.TrimSpace(f.Execute.URL) != "" {
-		// Fetch mode: build the init object (method + optional JSON body) + optional authId.
-		init := fmt.Sprintf("{ method: %s }", jsStr(f.Execute.Method))
-		if len(f.Execute.Body) > 0 {
-			bodyKeys := make([]string, 0, len(f.Execute.Body))
-			for k := range f.Execute.Body {
-				bodyKeys = append(bodyKeys, k)
-			}
-			sort.Strings(bodyKeys)
-			parts := make([]string, len(bodyKeys))
-			for i, k := range bodyKeys {
-				parts[i] = fmt.Sprintf("%s: %s", k, renderBodyValue(f.Execute.Body[k]))
-			}
-			init = fmt.Sprintf("{ method: %s, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ %s }) }",
-				jsStr(f.Execute.Method), strings.Join(parts, ", "))
-		}
-		if len(f.Execute.BodyJSON) > 0 {
-			if bj, err := renderBodyJSON(f.Execute.BodyJSON); err == nil {
-				init = fmt.Sprintf("{ method: %s, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(%s) }",
-					jsStr(f.Execute.Method), bj)
-			}
-		}
+		// Fetch mode: build the init object (method + optional headers + body) + optional authId.
+		init := renderFetchInit(f.Execute)
 		authArg := ""
 		if f.Auth != nil {
 			authArg = ", " + jsStr(f.Auth.ID) // basekit runtime injects the user's credential

@@ -283,6 +283,52 @@ func TestConditionalExpr(t *testing.T) {
 	}
 }
 
+func TestWritePathPutHeadersBodyJSON(t *testing.T) {
+	f := loadExchangeRate(t)
+	f.Domains = []string{"api.example.com"}
+	f.FormItems = []shortcut.FormItem{
+		{Key: "recordId", Label: shortcut.I18n{ZhCN: "记录ID"}, Component: "FieldSelect", SupportType: []string{"Text"}, Required: true},
+		{Key: "status", Label: shortcut.I18n{ZhCN: "状态"}, Component: "FieldSelect", SupportType: []string{"Text"}, Required: true},
+	}
+	f.Result.Properties = []shortcut.ResultProp{{Key: "ok", Type: "Text", Primary: true, Expr: "res.status"}}
+	f.Execute = shortcut.Execute{
+		URL: "https://api.example.com/records/{recordId}", Method: "PUT",
+		Headers:  map[string]string{"X-Api-Version": "2024-01", "X-Record": "{recordId}"},
+		BodyJSON: []byte(`{"status":"{status}"}`),
+	}
+	if err := f.Validate(); err != nil {
+		t.Fatalf("PUT + headers + bodyJson should validate, got: %v", err)
+	}
+	ts, err := shortcut.RenderIndexTS(f)
+	if err != nil {
+		t.Fatalf("render failed: %v", err)
+	}
+	for _, w := range []string{
+		"method: 'PUT'",
+		"'Content-Type': 'application/json'",        // auto-added for a body
+		"'X-Api-Version': '2024-01'",                // literal header
+		"'X-Record': inp.recordId",                  // header with {key} injection
+		"${inp.status}",                             // bodyJson placeholder interpolation
+		"await fetch(`https://api.example.com/records/${inp.recordId}`", // url placeholder
+	} {
+		if !strings.Contains(ts, w) {
+			t.Errorf("write-path render missing:\n  %s\n--- got ---\n%s", w, ts)
+		}
+	}
+	// GET must not carry a body.
+	f.Execute.Method = "GET"
+	if err := f.Validate(); err == nil {
+		t.Error("GET with a bodyJson must be rejected")
+	}
+	// DELETE without a body is fine.
+	f.Execute.Method = "DELETE"
+	f.Execute.BodyJSON = nil
+	f.Execute.Headers = nil
+	if err := f.Validate(); err != nil {
+		t.Errorf("DELETE without a body should validate, got: %v", err)
+	}
+}
+
 func TestBodyJSONNested(t *testing.T) {
 	f := loadExchangeRate(t)
 	f.Domains = []string{"api.deepseek.com"}
