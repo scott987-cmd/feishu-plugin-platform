@@ -27,7 +27,8 @@ const (
 		"calls ONE external HTTP API (execute.url + method), and writes back one or more output columns (result.properties). " +
 		"RULES: (1) `domains` MUST list every external host the request hits (e.g. api.exchangerate-api.com); execute.url's host MUST be one of them. " +
 		"(2) `result.kind` is \"object\"; each property has key (ascii), type, an optional 3-locale label, and `expr` (its value). " +
-		"(3) `expr` uses ONLY this grammar — no other code: atoms = a number, 'single-quoted string', rand(), in.<formItemKey>, res.<dotted.json.path>; operators + - * / % ( ) , ; and these functions: concat(a,b,…), upper(s), lower(s), trim(s), substr(s,start,len), slice(s,a,b), replace(s,from,to), len(s), urlencode(s), round(n,d). Examples: `in.amount * res.rates.USD` · `trim(in.text)` · `substr(in.idcard, 6, 8)` · `concat(in.last, in.first)` · `upper(in.code)`. " +
+		"(3) `expr` uses ONLY this grammar — no other code: atoms = a number, 'single-quoted string', rand(), in.<formItemKey>, res.<dotted.json.path>; operators + - * / % ( ) , ; and these functions: concat(a,b,…), upper(s), lower(s), trim(s), substr(s,start,len), slice(s,a,b), replace(s,from,to), len(s), urlencode(s), round(n,d), floor(n), ceil(n), abs(n), min(…), max(…). Examples: `in.amount * res.rates.USD` · `trim(in.text)` · `substr(in.idcard, 6, 8)` · `concat(in.last, in.first)` · `upper(in.code)`. " +
+		"(3b) CONDITIONALS — there are NO raw comparison operators (you may NOT write <, >, ==, ?, :, &&, ||, !). Use these FUNCTIONS instead: comparison eq(a,b)/ne(a,b)/gt(a,b)/gte(a,b)/lt(a,b)/lte(a,b) (return true/false), boolean and(…)/or(…)/not(x), branching if(cond, thenValue, elseValue), coalesce(a,b,…) (first non-empty), default(v, fallback). Examples: `if(gt(in.score, 90), 'A', 'B')` · `if(eq(substr(in.idcard,16,1) % 2, 1), '男', '女')` (ID-card gender by parity of the 17th digit) · `if(and(gte(in.age,18), lt(in.age,60)), '劳动年龄', '其他')` · `coalesce(res.data.name, '未知')`. " +
 		"Examples: `in.account * res.rates.USD` , `res.data.title` , `rand()`. " +
 		"(4) Include one hidden Text property with isGroupByKey via groupByKey=true and expr `rand()` as a stable row id. " +
 		"(5) execute.url may contain {formItemKey} placeholders. For a POST API, set method=POST. Flat body → execute.body (field→value, \"{formKey}\" injects input). NESTED/structured body (AI chat completions etc., e.g. messages array) → execute.bodyJson with the full JSON shape, putting \"{formKey}\" where an input goes (e.g. content). For AI APIs that need a Bearer key, also add auth HeaderBearerToken. " +
@@ -84,7 +85,7 @@ func fieldShortcutSchema() map[string]any {
 			"hidden":     boolean,
 			"groupByKey": d(boolean, "set true on a hidden Text id column whose expr is rand()"),
 			"formatter":  d(enum(shortcut.ValidFormatters), "optional number formatter"),
-			"expr":       d(str, "value EXPRESSION (use when there is a fetch): number | rand() | in.<formKey> | res.<json.path>, with + - * / ( ). Give either expr OR template, not both."),
+			"expr":       d(str, "value EXPRESSION: number | 'string' | rand() | in.<formKey> | res.<json.path>, with + - * / % ( ) and functions concat/upper/lower/trim/substr/slice/replace/len/urlencode/round/floor/ceil/abs/min/max plus comparison eq/ne/gt/gte/lt/lte, boolean and/or/not, and if(cond,a,b)/coalesce/default for conditionals (NO raw < > == ? :). Give either expr OR template, not both."),
 			"template":   d(str, "value TEMPLATE (use for compute-only / 'the URL is the result' plugins, NO fetch): a literal string with {formKey} placeholders, e.g. https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={text}. References inputs only."),
 		},
 	}

@@ -19,6 +19,7 @@ API** via the basekit `testField` / `testAction` harness — not just compiled.
 | [`fullname`](fullname/) | field · compute (pure local, no fetch) | 姓 + 名 拼接成全名 | concat verified |
 | [`text-trim`](text-trim/) | field · compute · `trim()` | 去掉文本首尾空格 | `"  hello world  "` → `"hello world"` |
 | [`idcard-birth`](idcard-birth/) | field · compute · `substr()` | 从身份证号截取出生日期(第7起8位) | `11010119900307123X` → `19900307` |
+| [`idcard-gender`](idcard-gender/) | field · compute · **conditional** `if`/`eq`/`substr` | 按身份证第17位奇偶判别性别(奇=男/偶=女) | `…0011` (17th=1) → `男` · `…0028` (17th=2) → `女` (**testField-verified**) |
 | [`to-upper`](to-upper/) | field · compute · `upper()` | 文本转全大写 | `"feishu"` → `"FEISHU"` |
 | [`ai-polish`](ai-polish/) | field · **POST + nested JSON body + Bearer auth** (AI) | 调用 DeepSeek 大模型润色中文文本 | `"今天天气不错我们去公园玩吧"` → polished Chinese paragraph (**real LLM call verified**; fill your key in `config.json`) |
 | [`fx-action`](fx-action/) | **automation action** · GET→JSON | 自动化:人民币金额按实时汇率换算,输出美元金额+汇率 | `{usd_amount: 14.7, exchange_rate: 0.147}` (100 CNY) · **also uploaded + published + run in a real Base automation** |
@@ -27,8 +28,11 @@ Coverage of generator capabilities demonstrated here: **GET→JSON mapping**, **
 types** (Bearer / QueryParamToken / CustomHeaderToken / Basic — see the generator), **compute-only / "the URL is
 the result"** (no outbound request), **nested/structured JSON bodies** (AI chat-completions style: `messages`
 array), **text-transformation functions** in expressions
-(`trim` / `upper` / `lower` / `substr` / `slice` / `replace` / `concat` / `len` / `urlencode` / `round`, all
-rendered as audited pure-JS helpers — never `eval`), and the **automation (`addAction`) track**.
+(`trim` / `upper` / `lower` / `substr` / `slice` / `replace` / `concat` / `len` / `urlencode` / `round` plus math
+`floor` / `ceil` / `abs` / `min` / `max`), **conditional logic in function form** — comparison
+`eq` / `ne` / `gt` / `gte` / `lt` / `lte`, boolean `and` / `or` / `not`, and branching
+`if(cond,a,b)` / `coalesce` / `default` (so the grammar never needs raw `< > = ? : & |` operators) — all
+rendered as audited pure-JS helpers, **never `eval`**, and the **automation (`addAction`) track**.
 
 ## Deploy a plugin into your Feishu
 

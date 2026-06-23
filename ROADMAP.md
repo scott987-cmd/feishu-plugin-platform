@@ -98,7 +98,7 @@
 
 | 优先 | 能力 | 价值 | 量 | 关键点 |
 |---|---|---|---|---|
-| ⭐1 | **表达式条件逻辑**(比较+三元) | 高 | M | `expr.go:56` 硬禁 `< > = ? : & \|`,致"金额>1000判VIP/SLA/阈值钳制/空值兜底"等最高频计算列写不出。以 `eq/gt/and/if/coalesce` **白名单函数**形式加,解析器不变、仍不 eval;顺手补 `floor/ceil/abs/min/max` |
+| ✅1 | **表达式条件逻辑**(比较+三元)— **已完成 2026-06-23** | 高 | M | 已加 `eq/ne/gt/gte/lt/lte`+`and/or/not`+`if/coalesce/default`+`floor/ceil/abs/min/max` 为**白名单纯JS函数**(`expr.go`),解析器与 `< > = ? : & \|` 禁令不变、仍不 eval。已真机验证:`plugin-center/idcard-gender` 按身份证 17 位奇偶判性别,build:field 编译通过 + testField 真跑(`…0011`→男/`…0028`→女);NL→DeepSeek 也正确产出 `if(eq(substr(...) % 2,1),'男','女')`。修了 `string % 2` 的 TS 严格算术报错(helper 返回类型标 `any`) |
 | ⭐2 | **验证过模板库 / few-shot + fork 现成插件** | 高 | S | plugin-center 的 `dsl.json` 已存"NL→DSL"但生成时未检索。灌最近 2-3 个进 prompt,首次成功率最便宜的杠杆;每个新能力附 golden 回归夹具 |
 | ⭐3 | **测试→生成闭环** | 高 | L | 执行 test,把 `res.* 路径错/非2xx/空结果`喂回同一修复循环;难点=沙箱+出网+真API非确定性→录制夹具做确定性CI + 可选实时冒烟 |
 | 4 | **写路径栈**:action 的 bodyJson → `PUT/PATCH/DELETE`+自定义header → 多步链式 | 高/中 | M→S→L | 现仅 GET/POST、单次请求、无自定义 header(`dsl.go:116`)。三件连起来才是"连接器"的技术前置 |

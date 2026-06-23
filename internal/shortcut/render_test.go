@@ -223,6 +223,66 @@ func TestExprFunctions(t *testing.T) {
 	}
 }
 
+func TestConditionalExpr(t *testing.T) {
+	f := loadExchangeRate(t)
+	f.Domains = nil
+	f.Execute = shortcut.Execute{} // compute-only
+	f.FormItems = []shortcut.FormItem{
+		{Key: "idcard", Label: shortcut.I18n{ZhCN: "身份证号"}, Component: "FieldSelect", SupportType: []string{"Text"}, Required: true},
+	}
+	// ID-card gender by parity of the 17th digit — exercises if/eq/substr + the % operator.
+	f.Result.Properties = []shortcut.ResultProp{
+		{Key: "gender", Type: "Text", Primary: true, Expr: "if(eq(substr(in.idcard, 16, 1) % 2, 1), '男', '女')"},
+	}
+	if err := f.Validate(); err != nil {
+		t.Fatalf("conditional expr should validate, got: %v", err)
+	}
+	ts, _ := shortcut.RenderIndexTS(f)
+	for _, w := range []string{
+		"const _if =", "const _eq =", "const _substr =", // only used helpers emitted
+		"gender: _if(_eq(_substr(inp.idcard, 16, 1) % 2, 1), '男', '女'),",
+	} {
+		if !strings.Contains(ts, w) {
+			t.Errorf("conditional render missing:\n  %s\n--- got ---\n%s", w, ts)
+		}
+	}
+	// unused conditional helpers must NOT be emitted
+	if strings.Contains(ts, "const _gt =") || strings.Contains(ts, "const _coalesce =") {
+		t.Error("unused conditional helpers should not be emitted")
+	}
+	// boolean/coalesce combo also validates and renders its helpers
+	f.Result.Properties[0].Expr = "if(and(gte(len(in.idcard), 18), not(eq(in.idcard, ''))), coalesce(in.idcard, '空'), '非法')"
+	if err := f.Validate(); err != nil {
+		t.Fatalf("boolean/coalesce expr should validate, got: %v", err)
+	}
+	// RAW comparison/boolean/ternary operators MUST still be rejected (no-eval invariant);
+	// every ident below is valid, so rejection is purely due to the operator.
+	for _, bad := range []string{
+		"in.idcard > 5",          // raw >
+		"len(in.idcard) == 18",   // raw ==
+		"len(in.idcard) ? 1 : 0", // raw ternary ? :
+		"not(in.idcard) | 0",     // raw |
+	} {
+		f.Result.Properties[0].Expr = bad
+		if err := f.Validate(); err == nil {
+			t.Errorf("raw-operator expr %q must be rejected", bad)
+		}
+	}
+	// non-allowlisted identifiers (incl. function-call-shaped injection) must be rejected:
+	// conditionals add new funcs, but the allowlist must stay closed.
+	for _, bad := range []string{
+		"eval('x')",                  // not allowlisted
+		"if(eq(in.idcard,1), constructor, 0)", // constructor ident
+		"coalesce(process.env, '0')", // process ident
+		"require('fs')",              // require ident
+	} {
+		f.Result.Properties[0].Expr = bad
+		if err := f.Validate(); err == nil {
+			t.Errorf("injection expr %q must be rejected", bad)
+		}
+	}
+}
+
 func TestBodyJSONNested(t *testing.T) {
 	f := loadExchangeRate(t)
 	f.Domains = []string{"api.deepseek.com"}

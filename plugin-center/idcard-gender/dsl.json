@@ -1,0 +1,14 @@
+{
+  "id": "idcard-gender",
+  "title": {"zh_CN": "身份证识别性别", "en_US": "ID Card Gender"},
+  "formItems": [
+    {"key": "idcard", "label": {"zh_CN": "身份证号", "en_US": "ID Number"}, "component": "FieldSelect", "supportType": ["Text"], "required": true}
+  ],
+  "result": {
+    "kind": "object",
+    "properties": [
+      {"key": "gender", "type": "Text", "label": {"zh_CN": "性别", "en_US": "Gender"}, "primary": true, "expr": "if(eq(substr(in.idcard, 16, 1) % 2, 1), '男', '女')"},
+      {"key": "_id", "type": "Text", "label": {"zh_CN": ""}, "hidden": true, "groupByKey": true, "expr": "rand()"}
+    ]
+  }
+}

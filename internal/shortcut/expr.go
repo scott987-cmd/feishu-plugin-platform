@@ -8,8 +8,12 @@ import (
 )
 
 // The value expressions in ResultProp.Expr are a deliberately tiny grammar:
-//   atoms    = number | rand() | in.<formKey> | res.<dotted.json.path>
-//   operators= + - * / ( )
+//   atoms    = number | 'string' | rand() | in.<formKey> | res.<dotted.json.path>
+//   operators= + - * / % ( ) ,
+//   functions= an allowlist (see exprFuncs) — including comparison/boolean/
+//              conditional logic in FUNCTION form (eq/gt/and/if/…), which is why
+//              raw comparison operators (< > = ? : & | !) stay FORBIDDEN below:
+//              conditionals go through allowlisted helpers, never raw JS.
 // Everything else is rejected. This keeps the LLM/DSL from smuggling arbitrary
 // JS into the generated execute() body — the expression is the ONE place a
 // generator could otherwise inject code, so it is allowlisted, not eval'd.
@@ -23,8 +27,21 @@ var (
 
 // exprFuncs is the allowlist of helper functions usable in expressions. Each is
 // rendered as a small pure JS helper (see exprHelperDefs) — `name(` becomes
-// `_name(`. No other function names are permitted.
-var exprFuncs = []string{"concat", "upper", "lower", "trim", "substr", "slice", "replace", "len", "urlencode", "round"}
+// `_name(`. No other function names are permitted. Comparison/boolean/conditional
+// logic is offered as FUNCTIONS (eq/gt/and/if/…) so the grammar needs no raw
+// `< > = ? : & |` operators (those remain forbidden), keeping the no-eval invariant.
+var exprFuncs = []string{
+	// string / number helpers
+	"concat", "upper", "lower", "trim", "substr", "slice", "replace", "len", "urlencode", "round",
+	// math
+	"floor", "ceil", "abs", "min", "max",
+	// comparison → boolean
+	"eq", "ne", "gt", "gte", "lt", "lte",
+	// boolean logic
+	"and", "or", "not",
+	// conditional
+	"if", "coalesce", "default",
+}
 
 func isExprFunc(name string) bool {
 	for _, f := range exprFuncs {
@@ -126,17 +143,41 @@ func transformSeg(s string) string {
 }
 
 // exprHelperDefs are the pure JS implementations of the allowlisted functions.
+// All helpers are annotated `: any` so their results compose freely with the
+// arithmetic operators (+ - * / %) and with each other — without TS's strict
+// "left-hand side of an arithmetic operation must be number" complaint. Runtime
+// semantics are unchanged; only the static type is relaxed (params are `any` too).
 var exprHelperDefs = map[string]string{
-	"concat":    "const _concat = (...a: any[]) => a.map(String).join('');",
-	"upper":     "const _upper = (s: any) => String(s).toUpperCase();",
-	"lower":     "const _lower = (s: any) => String(s).toLowerCase();",
-	"trim":      "const _trim = (s: any) => String(s).trim();",
-	"substr":    "const _substr = (s: any, a: any, l: any) => String(s).slice(Number(a), Number(a) + Number(l));",
-	"slice":     "const _slice = (s: any, a: any, b: any) => String(s).slice(Number(a), Number(b));",
-	"replace":   "const _replace = (s: any, a: any, b: any) => String(s).split(String(a)).join(String(b));",
-	"len":       "const _len = (s: any) => String(s).length;",
-	"urlencode": "const _urlencode = (s: any) => encodeURIComponent(String(s));",
-	"round":     "const _round = (n: any, d: any = 0) => Number(Number(n).toFixed(Number(d)));",
+	"concat":    "const _concat = (...a: any[]): any => a.map(String).join('');",
+	"upper":     "const _upper = (s: any): any => String(s).toUpperCase();",
+	"lower":     "const _lower = (s: any): any => String(s).toLowerCase();",
+	"trim":      "const _trim = (s: any): any => String(s).trim();",
+	"substr":    "const _substr = (s: any, a: any, l: any): any => String(s).slice(Number(a), Number(a) + Number(l));",
+	"slice":     "const _slice = (s: any, a: any, b: any): any => String(s).slice(Number(a), Number(b));",
+	"replace":   "const _replace = (s: any, a: any, b: any): any => String(s).split(String(a)).join(String(b));",
+	"len":       "const _len = (s: any): any => String(s).length;",
+	"urlencode": "const _urlencode = (s: any): any => encodeURIComponent(String(s));",
+	"round":     "const _round = (n: any, d: any = 0): any => Number(Number(n).toFixed(Number(d)));",
+	"floor":     "const _floor = (n: any): any => Math.floor(Number(n));",
+	"ceil":      "const _ceil = (n: any): any => Math.ceil(Number(n));",
+	"abs":       "const _abs = (n: any): any => Math.abs(Number(n));",
+	"min":       "const _min = (...a: any[]): any => Math.min(...a.map(Number));",
+	"max":       "const _max = (...a: any[]): any => Math.max(...a.map(Number));",
+	// comparison: gt/gte/lt/lte are numeric; eq/ne compare by string so they work
+	// for both numbers and text. All return a boolean (typed any) for if/and/or.
+	"eq":  "const _eq = (a: any, b: any): any => String(a) === String(b);",
+	"ne":  "const _ne = (a: any, b: any): any => String(a) !== String(b);",
+	"gt":  "const _gt = (a: any, b: any): any => Number(a) > Number(b);",
+	"gte": "const _gte = (a: any, b: any): any => Number(a) >= Number(b);",
+	"lt":  "const _lt = (a: any, b: any): any => Number(a) < Number(b);",
+	"lte": "const _lte = (a: any, b: any): any => Number(a) <= Number(b);",
+	"and": "const _and = (...a: any[]): any => a.every(Boolean);",
+	"or":  "const _or = (...a: any[]): any => a.some(Boolean);",
+	"not": "const _not = (a: any): any => !a;",
+	// conditional: if(cond, then, else); coalesce/default fall back on empty/null.
+	"if":       "const _if = (c: any, a: any, b: any): any => (c ? a : b);",
+	"coalesce": "const _coalesce = (...a: any[]): any => { for (const v of a) { if (v !== undefined && v !== null && v !== '') return v; } return ''; };",
+	"default":  "const _default = (v: any, d: any): any => (v === undefined || v === null || v === '') ? d : v;",
 }
 
 // emitExprHelpers writes (indented) the helper defs actually referenced by vals.

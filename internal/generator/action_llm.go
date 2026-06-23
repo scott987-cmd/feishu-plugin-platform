@@ -25,7 +25,7 @@ const (
 		"and returns a `result` object whose fields downstream automation steps can consume. " +
 		"RULES: (1) `domains` MUST list every external host hit; execute.url's host MUST be one of them. " +
 		"(2) each `inputs` item has key (ascii), a plain-string label, and required. (3) each `result` item has key (ascii), a plain-string label, a type, and `expr`. " +
-		"(4) `expr` uses ONLY: a number, 'single-quoted string', rand(), in.<inputKey>, res.<dotted.json.path>, with + - * / % ( ) , and functions concat/upper/lower/trim/substr/slice/replace/len/urlencode/round. Example: `in.amount * res.rates.USD` · `trim(in.text)`. " +
+		"(4) `expr` uses ONLY: a number, 'single-quoted string', rand(), in.<inputKey>, res.<dotted.json.path>, with + - * / % ( ) , and functions concat/upper/lower/trim/substr/slice/replace/len/urlencode/round/floor/ceil/abs/min/max. For conditionals use FUNCTIONS (no raw < > == ? :): comparison eq/ne/gt/gte/lt/lte, boolean and/or/not, branching if(cond,a,b)/coalesce/default. Examples: `in.amount * res.rates.USD` · `trim(in.text)` · `if(gt(res.code,400), 'error', 'ok')`. " +
 		"(5) For a POST API set method=POST and execute.body (a value of exactly \"{inputKey}\" injects that input, else literal). " +
 		"(6) If the API needs a key/token, add `auth` { type:'APIKey', label } (the user enters it; the runtime injects it). Omit for open APIs. " +
 		"Reuse names from the request; pick sensible result types. id is a lowercase ascii slug."
@@ -68,7 +68,7 @@ func actionSchema() map[string]any {
 			"key":   d(str, "ascii output key"),
 			"label": d(str, "plain-string label"),
 			"type":  enum(shortcut.ValidFieldTypes),
-			"expr":  d(str, "value expression: number | rand() | in.<key> | res.<json.path> with + - * / ( )"),
+			"expr":  d(str, "value expression: number | 'string' | rand() | in.<key> | res.<json.path> with + - * / % ( ), functions (concat/upper/.../round/floor/ceil/abs/min/max), and conditionals as functions eq/ne/gt/gte/lt/lte/and/or/not/if/coalesce/default (NO raw < > == ? :)"),
 		},
 	}
 	return map[string]any{
