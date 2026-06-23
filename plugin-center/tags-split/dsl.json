@@ -1,0 +1,12 @@
+{
+  "id": "tags-split",
+  "title": {"zh_CN": "标签拆分多选"},
+  "formItems": [
+    {"key": "raw", "label": {"zh_CN": "逗号分隔标签"}, "component": "FieldSelect", "supportType": ["Text"], "required": true}
+  ],
+  "result": {"kind": "object", "properties": [
+    {"key": "first", "type": "Text", "label": {"zh_CN": "原文"}, "primary": true, "expr": "trim(in.raw)"},
+    {"key": "tags", "type": "MultiSelect", "label": {"zh_CN": "标签"}, "expr": "split(in.raw, ',')"},
+    {"key": "_id", "type": "Text", "label": {"zh_CN": ""}, "hidden": true, "groupByKey": true, "expr": "rand()"}
+  ]}
+}

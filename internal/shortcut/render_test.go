@@ -362,6 +362,38 @@ func TestExtendedResultTypes(t *testing.T) {
 	}
 }
 
+func TestMultiSelectResultType(t *testing.T) {
+	f := loadExchangeRate(t)
+	f.Domains = nil
+	f.Execute = shortcut.Execute{} // compute-only: split a delimited input into tags
+	f.FormItems = []shortcut.FormItem{
+		{Key: "raw", Label: shortcut.I18n{ZhCN: "原始标签"}, Component: "FieldSelect", SupportType: []string{"Text"}, Required: true},
+	}
+	f.Result.Properties = []shortcut.ResultProp{
+		{Key: "first", Type: "Text", Primary: true, Expr: "trim(in.raw)"},
+		{Key: "tags", Type: "MultiSelect", Label: shortcut.I18n{ZhCN: "标签"}, Expr: "split(in.raw, ',')"},
+		{Key: "_id", Type: "Text", Hidden: true, GroupByKey: true, Expr: "rand()"},
+	}
+	if err := f.Validate(); err != nil {
+		t.Fatalf("MultiSelect + split should validate, got: %v", err)
+	}
+	ts, _ := shortcut.RenderIndexTS(f)
+	for _, w := range []string{
+		"type: FieldType.MultiSelect",
+		"const _split =",                 // helper emitted only because used
+		"tags: _split(inp.raw, ','),",    // array value, no special wrapping needed
+	} {
+		if !strings.Contains(ts, w) {
+			t.Errorf("MultiSelect render missing:\n  %s\n--- got ---\n%s", w, ts)
+		}
+	}
+	// MultiSelect cannot be the primary column (SDK: primary is Text|Number).
+	f.Result.Properties[0] = shortcut.ResultProp{Key: "p", Type: "MultiSelect", Primary: true, Expr: "split(in.raw, ',')"}
+	if err := f.Validate(); err == nil {
+		t.Error("a primary MultiSelect column must be rejected")
+	}
+}
+
 func TestUrlResultType(t *testing.T) {
 	f := loadExchangeRate(t)
 	f.Domains = nil

@@ -141,8 +141,9 @@ var (
 	// (for FieldSelect) pickable input types. Scalar types (Phone/Email/Currency/
 	// Progress/Rating/Barcode) carry the same string/number value as Text/Number —
 	// only the column semantics differ. Url is special-cased to a {text,link} cell
-	// value in the renderer. MultiSelect (array value) is omitted pending array output.
-	ValidFieldTypes = []string{"Number", "Text", "DateTime", "SingleSelect", "Checkbox", "Phone", "Email", "Currency", "Progress", "Rating", "Barcode", "Url"}
+	// value in the renderer. MultiSelect takes a string[] value — produce one with
+	// split(textField, ',') or a res.<path> that is already an array.
+	ValidFieldTypes = []string{"Number", "Text", "DateTime", "SingleSelect", "Checkbox", "Phone", "Email", "Currency", "Progress", "Rating", "Barcode", "Url", "MultiSelect"}
 	// primaryFieldTypes: the SDK restricts a PRIMARY result column to Text | Number.
 	primaryFieldTypes = []string{"Text", "Number"}
 	ValidResultKinds = []string{"object"}

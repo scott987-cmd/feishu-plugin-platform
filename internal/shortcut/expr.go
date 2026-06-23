@@ -41,6 +41,8 @@ var exprFuncs = []string{
 	"and", "or", "not",
 	// conditional
 	"if", "coalesce", "default",
+	// array (for MultiSelect columns): split a delimited string into a string[]
+	"split",
 }
 
 func isExprFunc(name string) bool {
@@ -178,6 +180,8 @@ var exprHelperDefs = map[string]string{
 	"if":       "const _if = (c: any, a: any, b: any): any => (c ? a : b);",
 	"coalesce": "const _coalesce = (...a: any[]): any => { for (const v of a) { if (v !== undefined && v !== null && v !== '') return v; } return ''; };",
 	"default":  "const _default = (v: any, d: any): any => (v === undefined || v === null || v === '') ? d : v;",
+	// split a delimited string into a trimmed, non-empty string[] (for MultiSelect).
+	"split": "const _split = (s: any, d: any): any => String(s).split(String(d)).map((x: any) => x.trim()).filter(Boolean);",
 }
 
 // emitExprHelpers writes (indented) the helper defs actually referenced by vals.
