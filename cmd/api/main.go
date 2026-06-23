@@ -42,7 +42,7 @@ func main() {
 	server := api.New(st, cfg)
 	authn := buildAuth()
 	if authn != nil {
-		server = server.WithAuth(authn).WithPlugins(store.NewMemoryPluginStore())
+		server = server.WithAuth(authn).WithPlugins(buildPluginStore())
 	}
 
 	srv := httpx.NewServer(":"+port, server.Routes())
@@ -111,6 +111,20 @@ func buildStore() store.Store {
 		log.Printf("store: memory")
 		return store.NewMemory()
 	}
+}
+
+// buildPluginStore selects per-user plugin persistence: a Feishu Bitable table
+// (ownership survives restarts) when FEISHU_BITABLE_APP_TOKEN + FEISHU_PLUGINS_TABLE_ID
+// are set, otherwise an in-process store. Reuses the platform's Feishu app creds.
+func buildPluginStore() store.PluginStore {
+	appToken := os.Getenv("FEISHU_BITABLE_APP_TOKEN")
+	tableID := os.Getenv("FEISHU_PLUGINS_TABLE_ID")
+	if appToken != "" && tableID != "" && !placeholder(appToken) && !placeholder(tableID) {
+		log.Printf("plugin store: bitable (persistent; table %s)", tableID)
+		return store.NewBitablePluginStore(os.Getenv("FEISHU_APP_ID"), os.Getenv("FEISHU_APP_SECRET"), appToken, tableID)
+	}
+	log.Printf("plugin store: memory (set FEISHU_BITABLE_APP_TOKEN + FEISHU_PLUGINS_TABLE_ID to persist ownership)")
+	return store.NewMemoryPluginStore()
 }
 
 // seed inserts one sample definition (dogfooding the sales_dashboard template) so

@@ -190,7 +190,9 @@ FEISHU_APP_ID=cli_xxx FEISHU_APP_SECRET=xxx \
   PORT=8080 GENERATOR_URL=http://localhost:8090 WEB_DIR=./web go run ./cmd/api
 ```
 
-Register `OAUTH_REDIRECT_URI` in the Feishu app's redirect-URL allowlist. When unset, login is disabled and the platform stays anonymous (unchanged). Routes: `GET /auth/login`, `GET /auth/callback`, `POST /auth/logout`, `GET /api/me`, and the cookie-authed `GET/POST /api/my/plugins` + `DELETE /api/my/plugins/{id}`. Identity uses a stateless HMAC-signed session cookie; ownership defaults to an in-process store (per-user, isolated).
+Register `OAUTH_REDIRECT_URI` in the Feishu app's redirect-URL allowlist. When unset, login is disabled and the platform stays anonymous (unchanged). Routes: `GET /auth/login`, `GET /auth/callback`, `POST /auth/logout`, `GET /api/me`, and the cookie-authed `GET/POST /api/my/plugins` + `DELETE /api/my/plugins/{id}`. Identity uses a stateless HMAC-signed session cookie.
+
+**Ownership persistence**: by default the per-user plugin store is in-process (lost on restart). To **persist ownership across restarts**, point it at a Feishu Bitable table — add `FEISHU_BITABLE_APP_TOKEN` (the platform's Base) + `FEISHU_PLUGINS_TABLE_ID` (a table with text fields `id`, `owner_open_id`, `owner_name`, `title`, `kind`, `dsl`, `created_at`). Each plugin is one record; users only ever see their own (owner-scoped reads).
 
 To use Claude instead of DeepSeek:
 
