@@ -99,8 +99,8 @@
 | 优先 | 能力 | 价值 | 量 | 关键点 |
 |---|---|---|---|---|
 | ✅1 | **表达式条件逻辑**(比较+三元)— **已完成 2026-06-23** | 高 | M | 已加 `eq/ne/gt/gte/lt/lte`+`and/or/not`+`if/coalesce/default`+`floor/ceil/abs/min/max` 为**白名单纯JS函数**(`expr.go`),解析器与 `< > = ? : & \|` 禁令不变、仍不 eval。已真机验证:`plugin-center/idcard-gender` 按身份证 17 位奇偶判性别,build:field 编译通过 + testField 真跑(`…0011`→男/`…0028`→女);NL→DeepSeek 也正确产出 `if(eq(substr(...) % 2,1),'男','女')`。修了 `string % 2` 的 TS 严格算术报错(helper 返回类型标 `any`) |
-| ⭐2 | **验证过模板库 / few-shot + fork 现成插件** | 高 | S | plugin-center 的 `dsl.json` 已存"NL→DSL"但生成时未检索。灌最近 2-3 个进 prompt,首次成功率最便宜的杠杆;每个新能力附 golden 回归夹具 |
-| ⭐3 | **测试→生成闭环** | 高 | L | 执行 test,把 `res.* 路径错/非2xx/空结果`喂回同一修复循环;难点=沙箱+出网+真API非确定性→录制夹具做确定性CI + 可选实时冒烟 |
+| ✅2 | **验证过模板库 / few-shot**(已完成 2026-06-23) | 高 | S | `internal/generator/exemplars/{field,action}.json` 内嵌 6+1 个验证过的「NL→DSL」范例(go:embed),`exemplars.go` 按中文 bigram+英文词重叠检索最相关 2-3 个注入 system prompt。单测保证范例恒 `Validate()`(不漂移)。真机:NL「英译中」→ 模型复现范例里的 `res.responseData.translatedText` 嵌套路径并编译通过 |
+| ✅3 | **测试→生成闭环**(已完成 2026-06-23) | 高 | L | `verify.go` 的 `Verifier`:`Validate()` 通过后用 `block-basekit-cli build:field` **对真 SDK 编译**,把编译错回喂同一修复循环(原本只吃静态 Validate 错)。opt-in(`VERIFY_BUILD=1`+`BASEKIT_NODE_MODULES`),无工具链则优雅跳过(`errVerifyUnavailable`)。真机证明捕获类:`substr(in.text)`(缺参)**过 Validate 但编译报 TS2554** → 被 build 捕获;单测 fakeVerifier 证明编译失败驱动修复轮 |
 | 4 | **写路径栈**:action 的 bodyJson → `PUT/PATCH/DELETE`+自定义header → 多步链式 | 高/中 | M→S→L | 现仅 GET/POST、单次请求、无自定义 header(`dsl.go:116`)。三件连起来才是"连接器"的技术前置 |
 | 5 | 结果列类型扩展(Url/User/MultiSelect/Currency…) | 中 | M | 现仅 5 种(Number/Text/DateTime/SingleSelect/Checkbox),输出比原生字段降级。多为加白名单+渲染映射 |
 | 6 | 分页/数组迭代;附件二进制 | 中/低 | L | 现仅取定长 `res.list.0.x`;附件 SDK 不确定性高→放最后 |

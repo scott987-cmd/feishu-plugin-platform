@@ -1,0 +1,86 @@
+[
+  {
+    "nl": "人民币金额按实时汇率换算成美元，输出美元金额和当前汇率",
+    "dsl": {
+      "id": "cny-to-usd",
+      "title": { "zh_CN": "人民币换美元" },
+      "domains": ["api.exchangerate-api.com"],
+      "formItems": [{ "key": "amount", "label": { "zh_CN": "人民币金额" }, "component": "FieldSelect", "supportType": ["Number"], "required": true }],
+      "result": { "kind": "object", "properties": [
+        { "key": "usd", "type": "Number", "label": { "zh_CN": "美元金额" }, "primary": true, "formatter": "DIGITAL_ROUNDED_2", "expr": "in.amount * res.rates.USD" },
+        { "key": "rate", "type": "Number", "label": { "zh_CN": "汇率" }, "formatter": "DIGITAL_ROUNDED_4", "expr": "res.rates.USD" },
+        { "key": "_id", "type": "Text", "label": { "zh_CN": "" }, "hidden": true, "groupByKey": true, "expr": "rand()" }
+      ] },
+      "execute": { "url": "https://api.exchangerate-api.com/v4/latest/CNY", "method": "GET" }
+    }
+  },
+  {
+    "nl": "输入IP地址查询地理位置，输出国家、城市、运营商",
+    "dsl": {
+      "id": "ip-geo",
+      "title": { "zh_CN": "IP地理位置" },
+      "domains": ["ip-api.com"],
+      "formItems": [{ "key": "ip", "label": { "zh_CN": "IP地址" }, "component": "FieldSelect", "supportType": ["Text"], "required": true }],
+      "result": { "kind": "object", "properties": [
+        { "key": "country", "type": "Text", "label": { "zh_CN": "国家" }, "primary": true, "expr": "res.country" },
+        { "key": "city", "type": "Text", "label": { "zh_CN": "城市" }, "expr": "res.city" },
+        { "key": "isp", "type": "Text", "label": { "zh_CN": "运营商" }, "expr": "res.isp" },
+        { "key": "_id", "type": "Text", "label": { "zh_CN": "" }, "hidden": true, "groupByKey": true, "expr": "rand()" }
+      ] },
+      "execute": { "url": "http://ip-api.com/json/{ip}", "method": "GET" }
+    }
+  },
+  {
+    "nl": "把文本生成二维码图片链接（结果就是URL，不需要请求外部接口）",
+    "dsl": {
+      "id": "text-to-qr",
+      "title": { "zh_CN": "文本转二维码" },
+      "formItems": [{ "key": "text", "label": { "zh_CN": "文本内容" }, "component": "FieldSelect", "supportType": ["Text"], "required": true }],
+      "result": { "kind": "object", "properties": [
+        { "key": "qr_url", "type": "Text", "label": { "zh_CN": "二维码URL" }, "primary": true, "template": "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={text}" },
+        { "key": "_id", "type": "Text", "label": { "zh_CN": "" }, "hidden": true, "groupByKey": true, "expr": "rand()" }
+      ] }
+    }
+  },
+  {
+    "nl": "把英文文本翻译成中文",
+    "dsl": {
+      "id": "en-to-zh",
+      "title": { "zh_CN": "英译中" },
+      "domains": ["api.mymemory.translated.net"],
+      "formItems": [{ "key": "text", "label": { "zh_CN": "英文文本" }, "component": "FieldSelect", "supportType": ["Text"], "required": true }],
+      "result": { "kind": "object", "properties": [
+        { "key": "zh", "type": "Text", "label": { "zh_CN": "译文" }, "primary": true, "expr": "res.responseData.translatedText" },
+        { "key": "_id", "type": "Text", "label": { "zh_CN": "" }, "hidden": true, "groupByKey": true, "expr": "rand()" }
+      ] },
+      "execute": { "url": "https://api.mymemory.translated.net/get?q={text}&langpair=en|zh", "method": "GET" }
+    }
+  },
+  {
+    "nl": "调用DeepSeek大模型润色中文文本（AI入格，需要API Key）",
+    "dsl": {
+      "id": "ai-polish",
+      "title": { "zh_CN": "AI润色" },
+      "domains": ["api.deepseek.com"],
+      "auth": { "id": "apiKey", "type": "HeaderBearerToken", "label": "DeepSeek API Key", "platform": "DeepSeek", "instructionsUrl": "https://platform.deepseek.com/api_keys" },
+      "formItems": [{ "key": "text", "label": { "zh_CN": "待润色文本" }, "component": "FieldSelect", "supportType": ["Text"], "required": true }],
+      "result": { "kind": "object", "properties": [
+        { "key": "polished", "type": "Text", "label": { "zh_CN": "润色结果" }, "primary": true, "expr": "res.choices.0.message.content" },
+        { "key": "_id", "type": "Text", "label": { "zh_CN": "" }, "hidden": true, "groupByKey": true, "expr": "rand()" }
+      ] },
+      "execute": { "url": "https://api.deepseek.com/chat/completions", "method": "POST", "bodyJson": { "model": "deepseek-chat", "messages": [{ "role": "user", "content": "{text}" }] } }
+    }
+  },
+  {
+    "nl": "根据身份证号第17位数字的奇偶判断性别，奇数为男偶数为女（条件逻辑）",
+    "dsl": {
+      "id": "idcard-gender",
+      "title": { "zh_CN": "身份证性别" },
+      "formItems": [{ "key": "idcard", "label": { "zh_CN": "身份证号" }, "component": "FieldSelect", "supportType": ["Text"], "required": true }],
+      "result": { "kind": "object", "properties": [
+        { "key": "gender", "type": "Text", "label": { "zh_CN": "性别" }, "primary": true, "expr": "if(eq(substr(in.idcard, 16, 1) % 2, 1), '男', '女')" },
+        { "key": "_id", "type": "Text", "label": { "zh_CN": "" }, "hidden": true, "groupByKey": true, "expr": "rand()" }
+      ] }
+    }
+  }
+]

@@ -3,6 +3,7 @@ package generator
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -159,7 +160,7 @@ func GenerateShortcut(prompt string) (shortcut.FieldShortcut, bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 	client := &http.Client{Timeout: 45 * time.Second, Transport: &http.Transport{Proxy: nil}}
-	f, err := generateShortcutViaChat(ctx, httpDeepSeek{apiKey: key, baseURL: base, http: client}, model, prompt)
+	f, err := generateShortcutViaChat(ctx, httpDeepSeek{apiKey: key, baseURL: base, http: client}, model, prompt, newBuildVerifierFromEnv())
 	if err != nil {
 		log.Printf("deepseek shortcut generation failed: %v", err)
 		return shortcut.FieldShortcut{}, false, err
@@ -167,9 +168,21 @@ func GenerateShortcut(prompt string) (shortcut.FieldShortcut, bool, error) {
 	return f, true, nil
 }
 
-// generateShortcutViaChat is the forced-call + validate + auto-repair loop for
-// field shortcuts. Pure logic — unit-tested with a fake chatAPI.
-func generateShortcutViaChat(ctx context.Context, api chatAPI, model, prompt string) (shortcut.FieldShortcut, error) {
+// verifyField returns nil when there is no verifier or it could not run; only a
+// real compile failure (against the real SDK) is returned, to drive a repair round.
+func verifyField(ctx context.Context, v Verifier, f shortcut.FieldShortcut) error {
+	if v == nil {
+		return nil
+	}
+	if err := v.VerifyField(ctx, f); err != nil && !errors.Is(err, errVerifyUnavailable) {
+		return fmt.Errorf("the DSL is valid but the rendered plugin failed to compile — fix the expr/types/shape: %w", err)
+	}
+	return nil
+}
+
+// generateShortcutViaChat is the forced-call + validate (+ optional build) +
+// auto-repair loop for field shortcuts. Pure logic — unit-tested with fakes.
+func generateShortcutViaChat(ctx context.Context, api chatAPI, model, prompt string, v Verifier) (shortcut.FieldShortcut, error) {
 	tools := []oaTool{{
 		Type: "function",
 		Function: oaFunctionDef{
@@ -178,8 +191,10 @@ func generateShortcutViaChat(ctx context.Context, api chatAPI, model, prompt str
 			Parameters:  fieldShortcutSchema(),
 		},
 	}}
+	// Ground generation on the 3 most relevant verified exemplars (few-shot).
+	system := shortcutSystemPrompt + fewShotBlock(retrieveExemplars(prompt, fieldExemplars, 3))
 	messages := []oaMessage{
-		{Role: "system", Content: shortcutSystemPrompt},
+		{Role: "system", Content: system},
 		{Role: "user", Content: prompt},
 	}
 
@@ -215,8 +230,10 @@ func generateShortcutViaChat(ctx context.Context, api chatAPI, model, prompt str
 			problem = "tool arguments were not valid FieldShortcut JSON: " + decodeErr.Error()
 		} else if verr := f.Validate(); verr != nil {
 			problem = "validation failed: " + verr.Error()
+		} else if berr := verifyField(ctx, v, f); berr != nil {
+			problem = berr.Error()
 		} else {
-			return f, nil // success
+			return f, nil // valid and (if enabled) compiles
 		}
 
 		messages = append(messages, msg, oaMessage{

@@ -1,0 +1,16 @@
+[
+  {
+    "nl": "自动化：输入人民币金额，按实时汇率换算成美元，输出美元金额和汇率供后续步骤使用",
+    "dsl": {
+      "id": "cny-to-usd-action",
+      "title": { "zh_CN": "汇率换算动作" },
+      "domains": ["api.exchangerate-api.com"],
+      "inputs": [{ "key": "amount", "label": "人民币金额", "required": true }],
+      "result": [
+        { "key": "usd_amount", "label": "美元金额", "type": "Number", "expr": "in.amount * res.rates.USD" },
+        { "key": "exchange_rate", "label": "汇率", "type": "Number", "expr": "res.rates.USD" }
+      ],
+      "execute": { "url": "https://api.exchangerate-api.com/v4/latest/CNY", "method": "GET" }
+    }
+  }
+]

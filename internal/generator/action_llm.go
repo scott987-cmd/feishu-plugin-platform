@@ -141,8 +141,10 @@ func generateActionViaChat(ctx context.Context, api chatAPI, model, prompt strin
 			Parameters:  actionSchema(),
 		},
 	}}
+	// Ground generation on the most relevant verified action exemplar(s).
+	system := actionSystemPrompt + fewShotBlock(retrieveExemplars(prompt, actionExemplars, 2))
 	messages := []oaMessage{
-		{Role: "system", Content: actionSystemPrompt},
+		{Role: "system", Content: system},
 		{Role: "user", Content: prompt},
 	}
 	for round := 0; round <= shortcutMaxRepairs; round++ {

@@ -47,7 +47,7 @@ Pick input column(s) → call one external API → write back one or more output
 
 - **4 auth types** the end-user fills in at config time (never hardcoded): `HeaderBearerToken`, `QueryParamToken`, `CustomHeaderToken`, `Basic`
 - `GET` / `POST` with a JSON body
-- **Expression mapping** over two namespaces: `in.<inputKey>` (inputs) and `res.<dotted.json.path>` (response), plus `+ - * / ( )`, array indices (`res.list.0.x`), and `rand()`
+- **Expression mapping** over two namespaces: `in.<inputKey>` (inputs) and `res.<dotted.json.path>` (response), plus `+ - * / % ( )`, array indices (`res.list.0.x`), `rand()`, string/number functions (`concat`/`upper`/`trim`/`substr`/`round`/`floor`/…), and **conditional logic in function form** — `eq`/`gt`/`and`/`if(cond,a,b)`/`coalesce` — so branching needs no raw `< > = ? :` operators
 - Multi-property **Object result** (several derived columns at once) with optional `NumberFormatter`
 
 **Example — NL → generated shortcut**
@@ -87,7 +87,7 @@ produces this DSL (the LLM's structured intermediate form)…
 Configure inputs → call one external API → return a result object that **downstream automation steps consume**.
 
 - `APIKey` auth (runtime-injected), `GET` / `POST` + body
-- Same `expr` grammar (`in.<inputKey>`, `res.<json.path>`, arithmetic, `rand()`)
+- Same `expr` grammar (`in.<inputKey>`, `res.<json.path>`, arithmetic, functions, `if`/`eq`/`gt`… conditionals, `rand()`)
 - Result is a plain object keyed by your output keys, with a typed `resultType`
 
 **Example — NL → generated action**
@@ -126,7 +126,7 @@ produces an Action DSL (inputs / result / execute) that compiles to an auditable
 - **NL → DSL** uses **DeepSeek** by default (OpenAI-compatible, **forced** function call; the tool's `parameters` schema is built from the same enums the validator checks, so schema and validator never drift). On invalid output the validation error is fed back as a tool result and the model retries — **auto-repair, ≤ 2 rounds**. **Claude** is opt-in (`LLM_PROVIDER=anthropic`). DeepSeek is a domestic endpoint, so its client **bypasses any proxy**.
 - **Three compile-time guardrails** (this is what makes the output trustworthy):
   1. **Outbound-domain allowlist, statically pre-checked** — every `execute.url` host must be covered by `domains` (`addDomainList`). The SDK hard-rejects any fetch outside that list at runtime; we catch it at compile time first.
-  2. **Expression allowlist — never `eval`, never arbitrary code.** `expr` is a tiny grammar (`number | rand() | in.<key> | res.<path>` with `+ - * / ( )`). Forbidden tokens (`; = [ ] { } $ \` " ' \\ // ?: , & | ! < >`) are rejected outright. The expression is the *one* place a generator could otherwise smuggle JS, so it is allowlisted, not interpreted.
+  2. **Expression allowlist — never `eval`, never arbitrary code.** `expr` is a tiny grammar (`number | 'string' | rand() | in.<key> | res.<path>` with `+ - * / % ( )` and an allowlisted set of pure-JS functions, including comparison/boolean/conditional helpers `eq`/`gt`/`and`/`if`/`coalesce`). Forbidden tokens (`; = [ ] { } $ \` " \\ // ?: & | ! < >`) are rejected outright — so even conditionals go through allowlisted functions, never raw operators. The expression is the *one* place a generator could otherwise smuggle JS, so it is allowlisted, not interpreted.
   3. **URL placeholder validation** — every `{placeholder}` in a URL or POST body must reference a declared input.
 
 ---
