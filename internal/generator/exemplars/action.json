@@ -28,5 +28,28 @@
       ],
       "execute": { "url": "https://api.example.com/v1/tickets/{ticketId}", "method": "PATCH", "bodyJson": { "status": "{status}" } }
     }
+  },
+  {
+    "nl": "把数据写回飞书多维表格的一条新记录(连接器:先取 tenant_access_token,再 batch_create)",
+    "dsl": {
+      "id": "feishu-record-writeback",
+      "title": { "zh_CN": "写回多维表格记录" },
+      "domains": ["open.feishu.cn"],
+      "inputs": [
+        { "key": "appId", "label": "应用 App ID", "required": true },
+        { "key": "appSecret", "label": "应用 App Secret", "required": true },
+        { "key": "appToken", "label": "多维表格 app_token", "required": true },
+        { "key": "tableId", "label": "数据表 table_id", "required": true },
+        { "key": "title", "label": "标题内容", "required": true }
+      ],
+      "result": [
+        { "key": "code", "label": "返回码(0成功)", "type": "Number", "expr": "res.code" },
+        { "key": "record_id", "label": "新记录ID", "type": "Text", "expr": "res.data.records.0.record_id" }
+      ],
+      "steps": [
+        { "id": "token", "url": "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal", "method": "POST", "bodyJson": { "app_id": "{appId}", "app_secret": "{appSecret}" } },
+        { "id": "create", "url": "https://open.feishu.cn/open-apis/bitable/v1/apps/{appToken}/tables/{tableId}/records/batch_create", "method": "POST", "headers": { "Authorization": "Bearer {token.tenant_access_token}" }, "bodyJson": { "records": [{ "fields": { "标题": "{title}" } }] } }
+      ]
+    }
   }
 ]

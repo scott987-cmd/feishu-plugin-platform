@@ -23,6 +23,7 @@ API** via the basekit `testField` / `testAction` harness — not just compiled.
 | [`to-upper`](to-upper/) | field · compute · `upper()` | 文本转全大写 | `"feishu"` → `"FEISHU"` |
 | [`ai-polish`](ai-polish/) | field · **POST + nested JSON body + Bearer auth** (AI) | 调用 DeepSeek 大模型润色中文文本 | `"今天天气不错我们去公园玩吧"` → polished Chinese paragraph (**real LLM call verified**; fill your key in `config.json`) |
 | [`fx-action`](fx-action/) | **automation action** · GET→JSON | 自动化:人民币金额按实时汇率换算,输出美元金额+汇率 | `{usd_amount: 14.7, exchange_rate: 0.147}` (100 CNY) · **also uploaded + published + run in a real Base automation** |
+| [`feishu-record-writeback`](feishu-record-writeback/) | **connector** · action · **multi-step** (token → `batch_create`) | 写回:把文本作为新记录写入飞书多维表格(连接器) | 渲染出**精确的 Feishu `batch_create` 请求**;`tenant_access_token` 链路**真机验证**(`code:0`),tsc 编译通过;实际写入需填入你自己的 app 凭证+目标 Base |
 
 Coverage of generator capabilities demonstrated here: **GET→JSON mapping**, **POST + JSON body**, **4 auth
 types** (Bearer / QueryParamToken / CustomHeaderToken / Basic — see the generator), **compute-only / "the URL is
@@ -32,7 +33,10 @@ array), **text-transformation functions** in expressions
 `floor` / `ceil` / `abs` / `min` / `max`), **conditional logic in function form** — comparison
 `eq` / `ne` / `gt` / `gte` / `lt` / `lte`, boolean `and` / `or` / `not`, and branching
 `if(cond,a,b)` / `coalesce` / `default` (so the grammar never needs raw `< > = ? : & |` operators) — all
-rendered as audited pure-JS helpers, **never `eval`**, and the **automation (`addAction`) track**.
+rendered as audited pure-JS helpers, **never `eval`**, the **automation (`addAction`) track**, the full HTTP
+write-path (`PUT` / `PATCH` / `DELETE` + custom headers), **multi-step chaining** (a later request uses an
+earlier one's response via `{stepId.json.path}`), and the **connector** pattern that writes records back into a
+Feishu Base via its OpenAPI (`tenant_access_token` → `batch_create`).
 
 ## Deploy a plugin into your Feishu
 
