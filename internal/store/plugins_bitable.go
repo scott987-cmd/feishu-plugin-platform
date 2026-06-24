@@ -20,18 +20,74 @@ import (
 type BitablePluginStore struct {
 	api bitableAPI
 	mu  sync.Mutex
+
+	// Read-through cache for the table-list (the read paths ListForUser/GetForUser
+	// hit it), invalidated on every local write. Same rationale as BitableStore:
+	// without it, every "my plugins" read and every execute-by-pluginId full-scans
+	// the whole org's plugin table over the rate-limited Feishu OpenAPI.
+	cacheMu  sync.Mutex
+	cache    []rawRecord
+	cacheAt  time.Time
+	cacheOK  bool
+	cacheTTL time.Duration
 }
 
 // NewBitablePluginStore wires the store to a dedicated plugin-records table.
 func NewBitablePluginStore(appID, appSecret, appToken, tableID string) *BitablePluginStore {
-	return &BitablePluginStore{api: &feishuBitable{
+	return &BitablePluginStore{cacheTTL: listCacheTTL, api: &feishuBitable{
 		appID: appID, appSecret: appSecret, appToken: appToken, tableID: tableID,
 		http: newFeishuHTTPClient(),
 	}}
 }
 
 // newBitablePluginStoreWith injects a bitableAPI (tests use a fake).
-func newBitablePluginStoreWith(api bitableAPI) *BitablePluginStore { return &BitablePluginStore{api: api} }
+func newBitablePluginStoreWith(api bitableAPI) *BitablePluginStore {
+	return &BitablePluginStore{api: api}
+}
+
+// listRaw returns the raw records, served from a short-TTL cache (read paths only;
+// writes use a fresh find for record-id correctness, then invalidate). Callers
+// only READ the records (parse into fresh PluginRecords), so the cached slice is
+// never mutated by them.
+func (s *BitablePluginStore) listRaw(ctx context.Context) ([]rawRecord, error) {
+	s.cacheMu.Lock()
+	if s.cacheOK && s.cacheTTL > 0 && time.Since(s.cacheAt) < s.cacheTTL {
+		recs := s.cache
+		s.cacheMu.Unlock()
+		return recs, nil
+	}
+	s.cacheMu.Unlock()
+	recs, err := s.api.list(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if s.cacheTTL > 0 {
+		s.cacheMu.Lock()
+		s.cache, s.cacheAt, s.cacheOK = recs, time.Now(), true
+		s.cacheMu.Unlock()
+	}
+	return recs, nil
+}
+
+func (s *BitablePluginStore) invalidate() {
+	s.cacheMu.Lock()
+	s.cacheOK = false
+	s.cacheMu.Unlock()
+}
+
+// scanFor finds the record matching BOTH owner and id (owner scoping enforced).
+func scanFor(recs []rawRecord, openID, id string) (recordID string, rec PluginRecord, ok bool) {
+	for _, r := range recs {
+		p, perr := pluginFromFields(r.fields)
+		if perr != nil {
+			continue
+		}
+		if p.Owner.OpenID == openID && p.ID == id {
+			return r.recordID, p, true
+		}
+	}
+	return "", PluginRecord{}, false
+}
 
 func (s *BitablePluginStore) SaveForUser(ctx context.Context, openID string, rec PluginRecord) (PluginRecord, error) {
 	if openID == "" {
@@ -63,13 +119,14 @@ func (s *BitablePluginStore) SaveForUser(ctx context.Context, openID string, rec
 	} else if _, err := s.api.create(ctx, fields); err != nil {
 		return PluginRecord{}, err
 	}
+	s.invalidate()
 	return rec, nil
 }
 
 func (s *BitablePluginStore) ListForUser(ctx context.Context, openID string) ([]PluginRecord, error) {
 	ctx, cancel := derive(ctx)
 	defer cancel()
-	recs, err := s.api.list(ctx)
+	recs, err := s.listRaw(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -88,8 +145,21 @@ func (s *BitablePluginStore) ListForUser(ctx context.Context, openID string) ([]
 func (s *BitablePluginStore) GetForUser(ctx context.Context, openID, id string) (PluginRecord, bool, error) {
 	ctx, cancel := derive(ctx)
 	defer cancel()
-	_, p, ok, err := s.find(ctx, openID, id)
-	return p, ok, err
+	recs, err := s.listRaw(ctx)
+	if err != nil {
+		return PluginRecord{}, false, err
+	}
+	if _, p, ok := scanFor(recs, openID, id); ok {
+		return p, true, nil
+	}
+	// Cache miss: confirm against a fresh list so a just-created plugin (possibly on
+	// another replica) isn't a false 404.
+	fresh, err := s.api.list(ctx)
+	if err != nil {
+		return PluginRecord{}, false, err
+	}
+	_, p, ok := scanFor(fresh, openID, id)
+	return p, ok, nil
 }
 
 func (s *BitablePluginStore) DeleteForUser(ctx context.Context, openID, id string) error {
@@ -101,26 +171,23 @@ func (s *BitablePluginStore) DeleteForUser(ctx context.Context, openID, id strin
 	if err != nil || !ok {
 		return err
 	}
-	return s.api.delete(ctx, recordID)
+	if err := s.api.delete(ctx, recordID); err != nil {
+		return err
+	}
+	s.invalidate()
+	return nil
 }
 
-// find returns the record matching BOTH owner and plugin id (owner scoping is
-// enforced here so one user can never address another's record).
+// find returns the record matching BOTH owner and plugin id, reading a FRESH list
+// (not the cache) so writes get the authoritative record id. Owner scoping is
+// enforced so one user can never address another's record.
 func (s *BitablePluginStore) find(ctx context.Context, openID, id string) (recordID string, rec PluginRecord, ok bool, err error) {
 	recs, err := s.api.list(ctx)
 	if err != nil {
 		return "", PluginRecord{}, false, err
 	}
-	for _, r := range recs {
-		p, perr := pluginFromFields(r.fields)
-		if perr != nil {
-			continue
-		}
-		if p.Owner.OpenID == openID && p.ID == id {
-			return r.recordID, p, true, nil
-		}
-	}
-	return "", PluginRecord{}, false, nil
+	recordID, rec, ok = scanFor(recs, openID, id)
+	return recordID, rec, ok, nil
 }
 
 func pluginToFields(r PluginRecord) (map[string]any, error) {

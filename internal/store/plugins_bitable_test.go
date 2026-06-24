@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 )
 
 func TestBitablePluginStoreRoundTripAndIsolation(t *testing.T) {
@@ -49,5 +50,41 @@ func TestBitablePluginStoreRoundTripAndIsolation(t *testing.T) {
 	sp, _ := ps.SaveForUser(ctx, "ou_alice", PluginRecord{Owner: Owner{OpenID: "ou_evil"}, Kind: "field", DSL: json.RawMessage(`{}`)})
 	if sp.Owner.OpenID != "ou_alice" {
 		t.Errorf("owner must be forced to scope user, got %q", sp.Owner.OpenID)
+	}
+}
+
+// TestBitablePluginListCache verifies the per-user store serves ListForUser /
+// GetForUser from the TTL cache (so "my plugins" + execute-by-pluginId don't
+// full-scan the whole org's plugin table each time) and that writes invalidate it.
+func TestBitablePluginListCache(t *testing.T) {
+	ctx := context.Background()
+	fake := newFakeBitable()
+	ps := &BitablePluginStore{api: fake, cacheTTL: time.Minute}
+
+	if _, err := ps.SaveForUser(ctx, "ou_a", PluginRecord{ID: "p1", Kind: "field", DSL: json.RawMessage(`{"id":"p1"}`)}); err != nil {
+		t.Fatal(err)
+	}
+	// Two reads after the save → exactly one underlying list (second is cached).
+	n0 := fake.listN
+	if _, err := ps.ListForUser(ctx, "ou_a"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := ps.GetForUser(ctx, "ou_a", "p1"); err != nil {
+		t.Fatal(err)
+	}
+	if got := fake.listN - n0; got != 1 {
+		t.Errorf("ListForUser+GetForUser hit the API %d times, want 1 (second cached)", got)
+	}
+	// A write invalidates: the next read is fresh.
+	n1 := fake.listN
+	if _, err := ps.SaveForUser(ctx, "ou_a", PluginRecord{ID: "p2", Kind: "field", DSL: json.RawMessage(`{"id":"p2"}`)}); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := ps.ListForUser(ctx, "ou_a")
+	if len(list) != 2 {
+		t.Errorf("after second save ListForUser = %d, want 2 (cache must have been invalidated)", len(list))
+	}
+	if fake.listN <= n1 {
+		t.Error("read after Save served stale cache; Save must invalidate")
 	}
 }
