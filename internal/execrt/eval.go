@@ -3,6 +3,7 @@ package execrt
 import (
 	"fmt"
 	"math"
+	"math/big"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -395,12 +396,34 @@ func anyTruthy(a []any) bool {
 
 func isBlank(v any) bool { return v == nil || v == "" }
 
+// roundTo mirrors the compiled JS helper `Number(Number(n).toFixed(d))` so the execrt
+// interpreter and the basekit-on-FaaS path write the SAME number for the same DSL.
+// toFixed rounds the decimal representation with ties going to the larger magnitude —
+// which differs BOTH from math.Round on a scaled float (round(2.675,2)=2.68 there, but
+// 2.67 in JS, because 2.675*100 floats up to 267.5000…) AND from strconv's round-half-
+// to-even (round(2.5,0)=2 there, but 3 in JS). We emulate toFixed exactly with big.Float:
+// round-half-up on |n|·10^d, then restore the sign.
 func roundTo(n float64, d int) float64 {
 	if d < 0 {
 		d = 0
 	}
-	p := math.Pow(10, float64(d))
-	return math.Round(n*p) / p
+	if math.IsNaN(n) || math.IsInf(n, 0) {
+		return n
+	}
+	const prec = 200
+	neg := math.Signbit(n)
+	scale := new(big.Float).SetPrec(prec).SetFloat64(math.Pow(10, float64(d)))
+	scaled := new(big.Float).SetPrec(prec).SetFloat64(math.Abs(n))
+	scaled.Mul(scaled, scale)
+	scaled.Add(scaled, big.NewFloat(0.5)) // ties -> larger magnitude (toFixed semantics)
+	m, _ := scaled.Int(nil)               // truncate toward zero == floor for non-negative
+	res := new(big.Float).SetPrec(prec).SetInt(m)
+	res.Quo(res, scale)
+	f, _ := res.Float64()
+	if neg {
+		f = -f
+	}
+	return f
 }
 
 // jsSlice mirrors String.prototype.slice(start, end) including negative indices

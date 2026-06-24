@@ -69,15 +69,15 @@ func ScaffoldAction(a Action, dir string) error {
 // expr-mapped plain-object result. Auth is deferred (action auth shape differs
 // from fields and is under-documented) — left for a verified follow-up.
 type Action struct {
-	ID      string         `json:"id"`
-	Title   I18n           `json:"title"`
-	Domains []string       `json:"domains"`
-	Auth    *ActionAuth    `json:"auth,omitempty"` // optional credential the user supplies at config time
-	Inputs  []ActionInput  `json:"inputs"`
-	Result  []ActionOutput `json:"result"`
-	Execute Execute        `json:"execute"`
-	Steps   []Step         `json:"steps,omitempty"`     // optional multi-step pipeline; mutually exclusive with Execute
-	CreatedBy *Creator     `json:"createdBy,omitempty"` // the Feishu user who created this (attribution)
+	ID        string         `json:"id"`
+	Title     I18n           `json:"title"`
+	Domains   []string       `json:"domains"`
+	Auth      *ActionAuth    `json:"auth,omitempty"` // optional credential the user supplies at config time
+	Inputs    []ActionInput  `json:"inputs"`
+	Result    []ActionOutput `json:"result"`
+	Execute   Execute        `json:"execute"`
+	Steps     []Step         `json:"steps,omitempty"`     // optional multi-step pipeline; mutually exclusive with Execute
+	CreatedBy *Creator       `json:"createdBy,omitempty"` // the Feishu user who created this (attribution)
 }
 
 // ActionAuth maps to the SDK's Action.authorization. Unlike fields (which expose
@@ -229,12 +229,6 @@ func (a Action) Validate() error {
 	return errors.Join(errs...)
 }
 
-// translateActionExpr is translateExpr but binding inputs to `args` (the action
-// execute parameter) instead of `inp`.
-func translateActionExpr(expr string) string {
-	return strings.ReplaceAll(translateExpr(expr), "inp.", "args.")
-}
-
 // RenderActionTS compiles an Action into basekit src/register.ts source.
 func RenderActionTS(a Action) (string, error) {
 	if err := a.Validate(); err != nil {
@@ -273,17 +267,20 @@ func RenderActionTS(a Action) (string, error) {
 	}
 	w("  ],\n")
 
-	w("  execute: async (args: Record<string, any>, context) => {\n")
+	// Name the execute param `inp` so the shared renderers (which emit `inp.<key>` input
+	// refs) bind to it directly. The previous code named it `args` and post-hoc string-
+	// replaced "inp."->"args." over the rendered source, which corrupted any literal that
+	// happened to contain the substring "inp." (a label, a URL host, a quoted string).
+	w("  execute: async (inp: Record<string, any>, context) => {\n")
 	// Pre-render output values; emit only the expression helpers they use.
 	actVals := make([]string, len(a.Result))
 	for i, p := range a.Result {
-		actVals[i] = translateActionExpr(p.Expr)
+		actVals[i] = translateExpr(p.Expr)
 	}
 	emitExprHelpers(&b, "    ", actVals)
 	b.WriteString(actionHelpers)
 	w("    try {\n")
 	if len(a.Steps) > 0 {
-		// Multi-step pipeline; render with inp. binding then rebind to args.
 		inputKeys := map[string]bool{}
 		for _, in := range a.Inputs {
 			inputKeys[in.Key] = true
@@ -292,13 +289,11 @@ func RenderActionTS(a Action) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		b.WriteString(strings.ReplaceAll(stepsJS, "inp.", "args."))
+		b.WriteString(stepsJS)
 	} else {
-		// Reuse the shared fetch-init renderer (method + headers + flat/structured body),
-		// then rebind input refs from `inp.` to `args.` (the action execute param).
-		initObj := strings.ReplaceAll(renderFetchInit(a.Execute), "inp.", "args.")
-		// URL placeholders bind to `args` (the action execute param), not `inp`.
-		actionURL := strings.ReplaceAll(renderURLTemplate(a.Execute.URL), "${inp.", "${args.")
+		// Reuse the shared fetch-init renderer (method + headers + flat/structured body).
+		initObj := renderFetchInit(a.Execute)
+		actionURL := renderURLTemplate(a.Execute.URL)
 		w("      const res: any = await fetch(`%s`, %s);\n", actionURL, initObj)
 	}
 	w("      return {\n")
@@ -357,14 +352,14 @@ run();
 `, strings.Join(testArgs, "\n"))
 
 	return map[string]string{
-		"package.json":     RenderActionPackageJSON(a),
-		"tsconfig.json":    tsconfigJSON,
-		"config.json":      "{\n  \"authorizations\": []\n}\n",
-		"block.json":       fmt.Sprintf("{\n  \"projectName\": %s,\n  \"blockTypeID\": \"REPLACE_WITH_ACTION_BLOCK_TYPE_ID\"\n}\n", jsonStr(a.ID)),
-		"src/register.ts":  src, // SDK testAction entry
-		"src/index.ts":     src, // mirror, for tooling that expects index
-		"test/index.ts":    test,
-		"README.md":        fmt.Sprintf("# %s\n\nGenerated automation action (basekit addAction), human-auditable source.\nEntry: src/register.ts. Needs app.json (with appId) in the parent directory.\n", a.Title.ZhCN),
+		"package.json":    RenderActionPackageJSON(a),
+		"tsconfig.json":   tsconfigJSON,
+		"config.json":     "{\n  \"authorizations\": []\n}\n",
+		"block.json":      fmt.Sprintf("{\n  \"projectName\": %s,\n  \"blockTypeID\": \"REPLACE_WITH_ACTION_BLOCK_TYPE_ID\"\n}\n", jsonStr(a.ID)),
+		"src/register.ts": src, // SDK testAction entry
+		"src/index.ts":    src, // mirror, for tooling that expects index
+		"test/index.ts":   test,
+		"README.md":       fmt.Sprintf("# %s\n\nGenerated automation action (basekit addAction), human-auditable source.\nEntry: src/register.ts. Needs app.json (with appId) in the parent directory.\n", a.Title.ZhCN),
 	}, nil
 }
 

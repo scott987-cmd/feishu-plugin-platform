@@ -255,6 +255,9 @@ func generateShortcutViaChat(ctx context.Context, api chatAPI, model, prompt str
 		if call == nil {
 			return shortcut.FieldShortcut{}, fmt.Errorf("model did not call %s", emitShortcutTool)
 		}
+		// Echo back only the selected tool_call so the single tool reply below satisfies the
+		// OpenAI contract (every tool_call id in the assistant turn needs a reply).
+		msg.ToolCalls = []oaToolCall{*call}
 
 		var f shortcut.FieldShortcut
 		decodeErr := json.Unmarshal([]byte(call.Function.Arguments), &f)

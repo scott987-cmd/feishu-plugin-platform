@@ -282,22 +282,28 @@ func (e *Engine) fetch(ctx context.Context, domains []string, method, u string, 
 func (e *Engine) mapResult(fs shortcut.FieldShortcut, inputs map[string]any, res any) (map[string]any, error) {
 	out := map[string]any{}
 	for _, p := range fs.Result.Properties {
+		var v any
 		switch {
 		case strings.TrimSpace(p.Template) != "":
-			v, err := render(p.Template, inputs, nil)
+			s, err := render(p.Template, inputs, nil)
 			if err != nil {
 				return nil, fmt.Errorf("result %q template: %w", p.Key, err)
 			}
-			out[p.Key] = v
+			v = s
 		case strings.TrimSpace(p.Expr) != "":
-			v, err := evalExpr(p.Expr, inputs, res)
+			ev, err := evalExpr(p.Expr, inputs, res)
 			if err != nil {
 				return nil, fmt.Errorf("result %q expr: %w", p.Key, err)
 			}
-			out[p.Key] = v
-		default:
-			out[p.Key] = nil
+			v = ev
 		}
+		// Mirror the compiler: a Url column is written as a Base URL-cell { text, link }
+		// (shortcut.renderPropValue), so both runtime paths produce a clickable link cell
+		// rather than a plain string on the self-hosted path.
+		if p.Type == "Url" && v != nil {
+			v = map[string]any{"text": v, "link": v}
+		}
+		out[p.Key] = v
 	}
 	return out, nil
 }

@@ -37,6 +37,7 @@ type BitableStore struct {
 	cacheAt  time.Time
 	cacheOK  bool
 	cacheTTL time.Duration
+	cacheGen uint64 // bumped on every invalidate; a fill commits only if gen is unchanged
 }
 
 // listCacheTTL bounds staleness of the List read cache (cross-replica writes show
@@ -94,6 +95,7 @@ func (s *BitableStore) List(ctx context.Context) ([]dsl.AppDefinition, error) {
 		s.cacheMu.Unlock()
 		return defs, nil
 	}
+	gen := s.cacheGen // snapshot: if a write invalidates while we fetch, don't cache stale data
 	s.cacheMu.Unlock()
 
 	ctx, cancel := derive(ctx)
@@ -113,10 +115,13 @@ func (s *BitableStore) List(ctx context.Context) ([]dsl.AppDefinition, error) {
 	}
 	if s.cacheTTL > 0 {
 		s.cacheMu.Lock()
-		// Store a private copy so `out` (returned to the caller) and the cache never
-		// share a backing array.
-		s.cache = append([]dsl.AppDefinition(nil), out...)
-		s.cacheAt, s.cacheOK = time.Now(), true
+		// Only commit if no invalidate landed mid-fetch (TOCTOU: otherwise a concurrent
+		// Put/Delete's invalidate is lost and this stale snapshot serves for a full TTL).
+		// Store a private copy so `out` and the cache never share a backing array.
+		if s.cacheGen == gen {
+			s.cache = append([]dsl.AppDefinition(nil), out...)
+			s.cacheAt, s.cacheOK = time.Now(), true
+		}
 		s.cacheMu.Unlock()
 	}
 	return out, nil
@@ -126,6 +131,7 @@ func (s *BitableStore) List(ctx context.Context) ([]dsl.AppDefinition, error) {
 func (s *BitableStore) invalidate() {
 	s.cacheMu.Lock()
 	s.cacheOK = false
+	s.cacheGen++
 	s.cacheMu.Unlock()
 }
 

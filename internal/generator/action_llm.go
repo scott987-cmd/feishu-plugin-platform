@@ -186,6 +186,9 @@ func generateActionViaChat(ctx context.Context, api chatAPI, model, prompt strin
 		if call == nil {
 			return shortcut.Action{}, fmt.Errorf("model did not call %s", emitActionTool)
 		}
+		// Echo back only the selected tool_call so the single tool reply below satisfies the
+		// OpenAI contract (every tool_call id in the assistant turn needs a reply).
+		msg.ToolCalls = []oaToolCall{*call}
 		var a shortcut.Action
 		decodeErr := json.Unmarshal([]byte(call.Function.Arguments), &a)
 		var problem string

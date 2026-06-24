@@ -30,6 +30,7 @@ type BitablePluginStore struct {
 	cacheAt  time.Time
 	cacheOK  bool
 	cacheTTL time.Duration
+	cacheGen uint64 // bumped on every invalidate; a fill commits only if gen is unchanged
 }
 
 // NewBitablePluginStore wires the store to a dedicated plugin-records table.
@@ -56,6 +57,7 @@ func (s *BitablePluginStore) listRaw(ctx context.Context) ([]rawRecord, error) {
 		s.cacheMu.Unlock()
 		return recs, nil
 	}
+	gen := s.cacheGen // snapshot: if a write invalidates while we fetch, don't cache stale data
 	s.cacheMu.Unlock()
 	recs, err := s.api.list(ctx)
 	if err != nil {
@@ -63,7 +65,11 @@ func (s *BitablePluginStore) listRaw(ctx context.Context) ([]rawRecord, error) {
 	}
 	if s.cacheTTL > 0 {
 		s.cacheMu.Lock()
-		s.cache, s.cacheAt, s.cacheOK = recs, time.Now(), true
+		// Only commit if no invalidate landed mid-fetch (else a concurrent write's
+		// invalidate is lost and this stale snapshot serves for a full TTL).
+		if s.cacheGen == gen {
+			s.cache, s.cacheAt, s.cacheOK = recs, time.Now(), true
+		}
 		s.cacheMu.Unlock()
 	}
 	return recs, nil
@@ -72,6 +78,7 @@ func (s *BitablePluginStore) listRaw(ctx context.Context) ([]rawRecord, error) {
 func (s *BitablePluginStore) invalidate() {
 	s.cacheMu.Lock()
 	s.cacheOK = false
+	s.cacheGen++
 	s.cacheMu.Unlock()
 }
 

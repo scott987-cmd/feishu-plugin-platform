@@ -34,8 +34,8 @@ func TestActionValidatesAndRenders(t *testing.T) {
 		"import { basekit, Component } from '@lark-opdev/block-basekit-server-api';",
 		"basekit.addAction({",
 		"{ itemId: 'amount', label: '人民币金额', required: true, component: Component.Input },",
-		// inputs bind to args.* (not inp.*), response to optional chaining
-		"usd: args.amount * res?.rates?.USD,",
+		// inputs bind to the execute param `inp.*`, response to optional chaining
+		"usd: inp.amount * res?.rates?.USD,",
 		"rate: res?.rates?.USD,",
 		// action resultType uses string types in a keyed object
 		"type: 'object',",
@@ -52,6 +52,36 @@ func TestActionValidatesAndRenders(t *testing.T) {
 		if strings.Contains(ts, bad) {
 			t.Errorf("action render unexpectedly contains field artifact: %s", bad)
 		}
+	}
+}
+
+// TestRenderActionTSPreservesInpLiteral guards the regression where the action renderer
+// did a blind ReplaceAll("inp.","args.") over the rendered source, corrupting any literal
+// that happened to contain the substring "inp." (now the execute param is named `inp` and
+// no rewrite happens).
+func TestRenderActionTSPreservesInpLiteral(t *testing.T) {
+	a := shortcut.Action{
+		ID:      "lit",
+		Title:   shortcut.I18n{ZhCN: "字面量"},
+		Domains: []string{"api.example.com"},
+		Inputs:  []shortcut.ActionInput{{Key: "name", Label: "n", Required: true}},
+		Result: []shortcut.ActionOutput{
+			{Key: "msg", Label: "m", Type: "Text", Expr: "concat('see inp.txt for ', in.name)"},
+		},
+		Execute: shortcut.Execute{URL: "https://api.example.com/x", Method: "GET"},
+	}
+	src, err := shortcut.RenderActionTS(a)
+	if err != nil {
+		t.Fatalf("render failed: %v", err)
+	}
+	if !strings.Contains(src, "see inp.txt for ") {
+		t.Errorf("literal containing 'inp.' was corrupted:\n%s", src)
+	}
+	if strings.Contains(src, "args.") {
+		t.Errorf("stale args. binding still present:\n%s", src)
+	}
+	if !strings.Contains(src, "inp.name") {
+		t.Errorf("input ref should bind to inp.name:\n%s", src)
 	}
 }
 
@@ -75,7 +105,7 @@ func TestActionAuthAndURLTemplate(t *testing.T) {
 		"label: 'OWM API Key',",
 		"componentProps: { placeholder: 'appid' },",
 		// URL placeholder binds to args (action param), not inp
-		"q=${args.city}`",
+		"q=${inp.city}`",
 	} {
 		if !strings.Contains(ts, w) {
 			t.Errorf("action auth/url render missing:\n  %s\n%s", w, ts)
@@ -133,8 +163,8 @@ func TestActionMultiStepChain(t *testing.T) {
 		t.Fatalf("render failed: %v", err)
 	}
 	for _, w := range []string{
-		"const s_lookup: any = await fetch(`https://httpbin.org/anything/${args.seed}`, { method: 'GET' });", // input ref rebinds to args.
-		"${s_lookup?.method}",      // cross-step ref unaffected by the rebind
+		"const s_lookup: any = await fetch(`https://httpbin.org/anything/${inp.seed}`, { method: 'GET' });", // input ref binds to the execute param inp.
+		"${s_lookup?.method}", // cross-step ref unaffected by the rebind
 		"const res: any = s_use;",
 		"out: res?.json?.v,",
 	} {
@@ -142,8 +172,8 @@ func TestActionMultiStepChain(t *testing.T) {
 			t.Errorf("action multi-step render missing:\n  %s\n--- got ---\n%s", w, ts)
 		}
 	}
-	if strings.Contains(ts, "inp.") {
-		t.Errorf("action multi-step leaked the inp. binding:\n%s", ts)
+	if strings.Contains(ts, "args.") {
+		t.Errorf("action multi-step leaked a stale args. binding:\n%s", ts)
 	}
 }
 
@@ -171,15 +201,15 @@ func TestActionWritePathPatchBodyJSON(t *testing.T) {
 		"method: 'PATCH'",
 		"'Content-Type': 'application/json'",
 		"'X-Api-Version': 'v2'",
-		"${args.status}", // bodyJson input refs rebind inp.→args. for actions
-		"await fetch(`https://api.example.com/tickets/${args.ticketId}`",
+		"${inp.status}", // bodyJson input refs bind to the execute param inp.
+		"await fetch(`https://api.example.com/tickets/${inp.ticketId}`",
 	} {
 		if !strings.Contains(ts, w) {
 			t.Errorf("action write-path render missing:\n  %s\n--- got ---\n%s", w, ts)
 		}
 	}
-	// the action source must never carry the field `inp.` binding.
-	if strings.Contains(ts, "inp.") {
-		t.Errorf("action render leaked the inp. binding:\n%s", ts)
+	// the action source must never carry a stale `args.` binding (execute param is `inp`).
+	if strings.Contains(ts, "args.") {
+		t.Errorf("action render leaked a stale args. binding:\n%s", ts)
 	}
 }

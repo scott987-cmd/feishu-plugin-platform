@@ -196,6 +196,10 @@ func generateViaChat(ctx context.Context, api chatAPI, model, prompt string) (ds
 		if call == nil {
 			return dsl.AppDefinition{}, fmt.Errorf("model did not call %s", emitToolName)
 		}
+		// Echo back only the selected tool_call so the single tool reply below satisfies the
+		// OpenAI contract: an assistant turn carrying tool_calls needs a reply for EVERY id,
+		// else the next request 400s instead of repairing.
+		msg.ToolCalls = []oaToolCall{*call}
 
 		var def dsl.AppDefinition
 		decodeErr := json.Unmarshal([]byte(call.Function.Arguments), &def)
