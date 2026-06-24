@@ -137,6 +137,6 @@ docker compose -f docker-compose.prod.yml ps
 
 ## Caveats
 
-- **The frontend-embedded token is visible to end users** → only suitable for "internal enterprise use, plugin published only to this enterprise"; for multi-user / external scenarios you must upgrade to user-level auth (see `docs/PRODUCTION.en.md` §7).
+- **The client embeds a read-only token (`PLATFORM_READ_TOKEN`)** → even if extracted it can only read (`GET /api/apps*` + `/api/execute`); write/delete/generate require the server-held admin token or a session. For true per-user identity inside the Bitable webview, upgrade to Feishu webview-OAuth (see `docs/PRODUCTION.en.md` §7).
 - `STORE=bitable` persists definitions into a Bitable; for production boundaries such as uniqueness constraints / rate limiting under multiple replicas, see `docs/PRODUCTION.en.md` §8.
 - To upgrade to k8s: `deploy/k8s/` is ready (Deployment/HPA/Ingress/NetworkPolicy/PDB); at that point, push the images to a registry and use cert-manager + Ingress to terminate TLS.

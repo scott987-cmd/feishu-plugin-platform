@@ -25,7 +25,7 @@
 > 注意保留双路径：上传到飞书的插件仍走「生成标准 basekit 工程 → opdev 上传 → 跑在飞书 basekit FaaS」路径；容器渲染轨的连接器 / 字段捷径执行走「自托管 execute 运行时」路径。同一份 execute DSL，两个宿主。
 
 这也解释了整套架构的分水岭：
-- **只读数据视图**（stat/chart/table/gauge/pivot/…，已实现 12 渲染器 9 算子）→ 容器渲染引擎读 DSL，用 `@lark-base-open/js-sdk` 在 webview 里直接读宿主数据渲染。**无 execute、无新出网、无写入**，所以无需任何后端运行时。
+- **只读数据视图**（stat/chart/table/gauge/pivot/…，已实现 12 渲染器 9 算子）→ 容器渲染引擎读 DSL，用 opdev 的 `@lark-opdev/block-bitable-api` 在 webview 里直接读宿主数据渲染。**无 execute、无新出网、无写入**，所以无需任何后端运行时。
 - **execute 类**（字段捷径/连接器）→ 要发起对外 HTTP（如 Open-Meteo）并把响应映射成输出列。这一步需要把出网/凭证/审计/限流收口到一处 → 必须落到我们的 k8s。
 
 ---

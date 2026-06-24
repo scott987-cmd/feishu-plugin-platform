@@ -1,5 +1,5 @@
-# Self-hosted execute-runner: the FaaS replacement for private-deployment Feishu
-# (no basekit FaaS). Interprets a field-shortcut DSL at request time — fetch
+# Self-hosted execute-runner: an auditable, outbound-centralized runtime for the
+# container renderer's connector / field-shortcut execution. Interprets a field-shortcut DSL at request time — fetch
 # external APIs (per-plugin domain allowlist + SSRF guard) and map the response.
 # Internal only: reached by the api (call-chain B), never the public ingress.
 # See docs/EXECUTE_RUNTIME.md.

@@ -100,7 +100,7 @@ Manual gate:
 - Publishing the container plugin and admin review are manual steps (Feishu's security model; cannot be fully automated).
 
 Auth / security:
-- API auth is a **shared bearer token**, embedded in the frontend bundle (end users can extract it), and the single token carries full read/write/delete permissions. Only suitable for "internal enterprise use, plugin published only to this enterprise." Before multi-user / external use, upgrade to user-level auth (JSAPI ticket), or split a read-only token for the plugin and use a separate ops token for write/delete generation.
+- API auth is a **capability-split dual token + session**: the client bundle embeds only the **read-only token `PLATFORM_READ_TOKEN`** (`GET /api/apps*` and `/api/execute` only); **write / delete / generate** (`POST`, `DELETE /api/apps`, `/api/generate`) require the server-held **admin token `PLATFORM_API_TOKEN`** or a logged-in session; `/api/my/*` is session-only. Even if the client token leaks it can only read — the drop-the-table / burn-the-budget IDOR is eliminated; `put`/`delete` are audit-logged. **Residual boundary**: the container widget has no platform session inside the Bitable webview and carries the downscoped read-only token, so it is not yet true per-user identity (true per-user needs Feishu webview-OAuth — later).
 - The generator itself has **no auth**, relying on the `api→generator` NetworkPolicy for isolation; **CNIs such as flannel do not enforce NetworkPolicy**, so for production use Calico/Cilium or add an internal token to `/generate`.
 
 Scaling / rate limiting:
@@ -109,7 +109,7 @@ Scaling / rate limiting:
 
 Observability / degradation:
 - The generator's readiness probe is equivalent to its liveness probe (template generation needs no key and is always available); when the AI key is missing, NL **silently degrades to keyword routing**, warning only in the startup log — monitoring should watch this warning and the LLM balance.
-- Real online DeepSeek/Bitable calls have each been tested and passed (see README); the exact API shape of the frontend `@lark-base-open/js-sdk` must be verified by live debugging inside a real Feishu host (already isolated behind the interface).
+- Real online DeepSeek/Bitable calls have each been tested and passed (see README); the container renderer (plugin/block) reads host data via opdev's `@lark-opdev/block-bitable-api`, whose exact API shape must be verified by live debugging inside a real Feishu host (already isolated behind the interface).
 
 Rendering / data:
 - The frontend **does not yet execute `filter` on the client**: stats/charts with a filter display the full value and show a "⚠ filter not executed" notice on the card; filter parsing supporting subsets is a follow-up item.

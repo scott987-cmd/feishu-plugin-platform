@@ -25,8 +25,8 @@ services:
       - "8090"                    # 仅容器网络可见,不对外
     restart: unless-stopped
 
-  # 自托管 execute 运行时(替代私有化没有的飞书 FaaS)。仅容器网络可见,
-  # 只由 api 经 call-chain B 调用,不对外暴露。详见 docs/EXECUTE_RUNTIME.md。
+  # 自托管 execute 运行时:容器渲染器的连接器/字段捷径执行收口(可审计、出网集中)。
+  # 仅容器网络可见,只由 api 经 call-chain B 调用,不对外暴露。详见 docs/EXECUTE_RUNTIME.md。
   execute-runner:
     build:
       context: ../..

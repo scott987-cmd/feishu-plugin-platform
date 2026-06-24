@@ -25,7 +25,7 @@ state.json
 *.p12
 *.pfx
 
-# ── Node / TypeScript (root, frontend/, web/, plugin/block/, publisher/) ─────
+# ── Node / TypeScript (root, web/, plugin/block/, publisher/) ─────
 # Match at any depth so every workspace's deps are covered.
 node_modules/
 **/node_modules/

@@ -100,7 +100,7 @@ opdev upload ./dist
 - 容器插件上架与管理员审核是人工步骤(飞书安全模型,无法全自动)。
 
 鉴权 / 安全:
-- API 鉴权为**共享 bearer token**,前端 bundle 内嵌(终端用户可提取),且单 token 含读写删全权限。仅适用于"企业内部自用、插件只发本企业"。多用户/外部前应升级为用户级鉴权(JSAPI ticket),或拆只读 token 给插件、写删生成另用运维 token。
+- API 鉴权是**能力分离的双 token + 会话**:客户端 bundle 只内嵌**只读 token `PLATFORM_READ_TOKEN`**(仅 `GET /api/apps*` 与 `/api/execute`);**写 / 删 / 生成**(`POST`、`DELETE /api/apps`、`/api/generate`)需服务端持有的 **admin token `PLATFORM_API_TOKEN`** 或登录会话;`/api/my/*` 仅会话。即便客户端 token 泄露也只能读,删库 / 烧预算的 IDOR 已消除;`put`/`delete` 写审计日志。**遗留边界**:容器 widget 在 Bitable webview 内无我方会话、拿的是降权只读 token,尚非真·per-user 身份(真 per-user 需飞书 webview-OAuth,后续)。
 - generator 自身**无鉴权**,依赖 `api→generator` 的 NetworkPolicy 隔离;**flannel 等 CNI 不强制 NetworkPolicy**,生产请用 Calico/Cilium 或为 `/generate` 加内部 token。
 
 伸缩 / 限流:
@@ -109,7 +109,7 @@ opdev upload ./dist
 
 可观测 / 退化:
 - generator 就绪探针等价存活探针(模板生成不需 key 恒可用);AI key 缺失时 NL **静默退化为关键词路由**,仅启动日志告警——监控请关注该告警与 LLM 余额。
-- 线上 DeepSeek/Bitable 真调用已分别实测通过(见 README);前端 `@lark-base-open/js-sdk` 的具体 API 形状需在真飞书宿主内联调核实(已隔离在接口后)。
+- 线上 DeepSeek/Bitable 真调用已分别实测通过(见 README);容器渲染器(plugin/block)读宿主数据用的是 opdev 的 `@lark-opdev/block-bitable-api`,其具体 API 形状需在真飞书宿主内联调核实(已隔离在接口后)。
 
 渲染 / 数据:
 - 前端**暂不在客户端执行 `filter`**:带 filter 的 stat/chart 显示全量值,并在卡片上打"⚠ 过滤未执行"提示;支持子集的 filter 解析为后续项。

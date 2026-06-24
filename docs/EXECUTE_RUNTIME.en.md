@@ -27,7 +27,7 @@ There are two distinct execution hosts, depending on how a plugin ships:
 > Note that we preserve the dual goal: plugins uploaded to Feishu can still take the "generate a standard basekit project → opdev upload" path and run on basekit FaaS; the container-renderer / self-hosted track takes the "self-hosted execute runtime" path. One and the same execute DSL, two hosts.
 
 This also explains the watershed of the entire architecture:
-- **Read-only data views** (stat/chart/table/gauge/pivot/…, 12 renderers and 9 operators already implemented) → the container rendering engine reads the DSL and uses `@lark-base-open/js-sdk` to directly read the host data and render in the webview. **No execute, no new outbound networking, no writes**, so no backend runtime is needed.
+- **Read-only data views** (stat/chart/table/gauge/pivot/…, 12 renderers and 9 operators already implemented) → the container rendering engine reads the DSL and uses opdev's `@lark-opdev/block-bitable-api` to directly read the host data and render in the webview. **No execute, no new outbound networking, no writes**, so no backend runtime is needed.
 - **execute-class** (field shortcuts / connectors) → must initiate outbound HTTP (e.g., Open-Meteo) and map the response into an output column. For the container-renderer track this step must land on our k8s, so that all outbound calls go through one auditable runtime.
 
 ---
