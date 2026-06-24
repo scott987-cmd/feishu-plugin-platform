@@ -8,20 +8,24 @@ import { applyFilter } from './filter';
 import type { AppDefinition, Component } from './dsl';
 
 // 加载:从平台 API 取应用定义(?app=<id> 优先,否则取列表第一个),再用 SDK 读宿主真实数据。
-async function load(): Promise<{ def: AppDefinition; records: Record<string, unknown>[] }> {
+async function load(): Promise<{ defs: AppDefinition[]; records: Record<string, unknown>[] }> {
   const id = new URLSearchParams(window.location.search).get('app');
-  let def: AppDefinition | undefined;
+  const apps = await listApps();
+  let defs: AppDefinition[];
   if (id) {
-    def = await getApp(id);
+    const d = await getApp(id);
+    defs = d ? [d] : [];
   } else {
-    // 多插件共存:优先渲染「绑定了当前数据表」的那个应用;否则回退到第一个。
-    const apps = await listApps();
+    // 多插件共存:渲染「绑定了当前数据表」的全部应用(按上架顺序堆叠);
+    // 都不匹配时回退到第一个,保证空表场景仍有东西可看。
     const tid = await currentTableId().catch(() => undefined);
-    def = (tid && apps.find((a) => a.bind && a.bind.tableId === tid)) || apps[0];
+    const matched = tid ? apps.filter((a) => a.bind && a.bind.tableId === tid) : [];
+    defs = matched.length ? matched : apps.slice(0, 1);
   }
-  if (!def) throw new Error('平台上没有可渲染的应用定义(先在平台生成一个)');
-  const { records } = await readHostData(def);
-  return { def, records };
+  if (!defs.length) throw new Error('平台上没有可渲染的应用定义(先在平台生成一个)');
+  // 同一宿主表:记录读一次,共享给该表上的所有插件。
+  const { records } = await readHostData(defs[0]);
+  return { defs, records };
 }
 
 const fmt = (n: number): string => Math.round(n).toLocaleString();
@@ -709,15 +713,19 @@ export const App = () => {
       ) : null}
       {r.result ? (
         <>
-          <div className="hd">
-            <div className="mk" aria-hidden="true" />
-            <h1>{r.result.def.name}</h1>
-          </div>
-          <div className="grid">
-            {r.result.def.ui.components.map((c, i) => (
-              <Comp key={i} c={c} records={r.result!.records} />
-            ))}
-          </div>
+          {r.result.defs.map((def, di) => (
+            <section key={def.id ?? di} style={di ? { marginTop: 28 } : undefined}>
+              <div className="hd">
+                <div className="mk" aria-hidden="true" />
+                <h1>{def.name}</h1>
+              </div>
+              <div className="grid">
+                {def.ui.components.map((c, i) => (
+                  <Comp key={i} c={c} records={r.result!.records} />
+                ))}
+              </div>
+            </section>
+          ))}
         </>
       ) : null}
     </div>
