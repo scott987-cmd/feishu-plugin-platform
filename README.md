@@ -45,6 +45,8 @@
 
 两种生成器，均面向官方 SDK `@lark-opdev/block-basekit-server-api`（固定到 `1.0.6`，CLI `1.0.5`）：
 
+> **产出边界**：平台生成**字段捷径（`addField`）**与**自动化动作（`addAction`）**两类 server 能力，外加一个**容器（数据表视图）渲染器**承载只读视图与逐行 enrich。它**不**生成飞书的**边栏插件**或**数据连接器**。
+
 ### 1. Field shortcut · 字段捷径 (field shortcut) — `basekit.addField`
 
 选择输入列 → 调用一个外部 API → 写回一个或多个输出列。

@@ -45,6 +45,8 @@ The generator only emits a correct, standard, auditable project; the runtime is 
 
 Two generators, both targeting the official SDK `@lark-opdev/block-basekit-server-api` (pinned to `1.0.6`, CLI `1.0.5`):
 
+> **Scope**: the platform generates two server capabilities — **field shortcuts (`addField`)** and **automation actions (`addAction`)** — plus a **container (data-table-view) renderer** for read-only views and per-row enrich. It does **not** generate Feishu **sidebar plugins** or **data connectors**.
+
 ### 1. Field shortcut · 字段捷径 (field shortcut) — `basekit.addField`
 
 Pick input column(s) → call one external API → write back one or more output columns.
