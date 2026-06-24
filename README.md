@@ -146,6 +146,16 @@ go test ./...
 
 Covers the DSL validators (off-schema rejection), the expression allowlist, URL/domain pre-checks, and renderer output. The pinned basekit versions and `expr` lowering were verified end-to-end on a real basekit upload.
 
+### SDK enum reconciliation — the trust gate
+
+The generator emits references into basekit SDK enums (`FieldType.<KEY>`, `NumberFormatter.<KEY>`, `AuthorizationType.<KEY>`, `FieldComponent.<KEY>`, and an `addAction` auth literal). An off-list value compiles to `undefined` and breaks the published plugin at runtime with **no compile error** — that is how a phantom `PERCENT_ROUNDED_2` formatter once slipped in. To make that class of bug impossible to ship:
+
+- `scripts/refresh-sdk-enums.sh` parses the SDK's `dist/index.d.ts` and writes the authoritative enum keys to `internal/shortcut/testdata/basekit_sdk_enums.json` (the golden).
+- `internal/shortcut/sdk_reconcile_test.go` (runs under `go test ./...`) asserts **every** generator allowlist value is a subset of the matching SDK set, and prints the coverage gaps (SDK values not yet supported) for free.
+- CI closes both directions: the test fails if an allowlist drifts from the golden; the `sdk-drift` job re-extracts from the pinned SDK and fails if the golden itself is stale (`.github/workflows/ci.yml`).
+
+After bumping the SDK: `make sdk-enums`, review the diff, and the test will point at any allowlist that needs updating.
+
 ### CLI — `cmd/shortcutgen`
 
 ```bash

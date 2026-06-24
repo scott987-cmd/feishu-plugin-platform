@@ -9,9 +9,13 @@ help: ## list targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN{FS=":.*?## "}{printf "  %-18s %s\n", $$1, $$2}'
 
 .PHONY: test
-test: ## vet + unit tests
+test: ## vet + unit tests (incl. SDK enum reconciliation gate)
 	go vet ./...
 	go test ./...
+
+.PHONY: sdk-enums
+sdk-enums: ## refresh the basekit SDK enum golden from the installed/pinned SDK
+	scripts/refresh-sdk-enums.sh
 
 .PHONY: build
 build: ## build all binaries to ./bin

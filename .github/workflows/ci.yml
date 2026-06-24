@@ -1,0 +1,48 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  go:
+    name: vet + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+      - run: go vet ./...
+      # Includes internal/shortcut/sdk_reconcile_test.go: fails if any generator
+      # allowlist drifts away from the checked-in SDK enum golden.
+      - run: go test ./...
+
+  sdk-drift:
+    # Closes the other half of the loop: fails if the golden itself is stale versus
+    # the SDK version the plugins are pinned to. Re-extracts from the real SDK and
+    # diffs the result against the committed golden.
+    name: sdk enum golden is fresh
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Resolve pinned SDK version
+        id: sdk
+        run: |
+          v=$(jq -r '.dependencies["@lark-opdev/block-basekit-server-api"]' plugin-center/exchange-rate/package.json)
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "Pinned SDK: $v"
+      - name: Regenerate golden from the pinned SDK
+        env:
+          SDK_VERSION: ${{ steps.sdk.outputs.version }}
+        run: scripts/refresh-sdk-enums.sh --pack
+      - name: Fail if the committed golden is out of date
+        run: |
+          if ! git diff --exit-code internal/shortcut/testdata/basekit_sdk_enums.json; then
+            echo "::error::SDK enum golden is stale. Run scripts/refresh-sdk-enums.sh, review the diff, and update the Go allowlists in internal/shortcut as needed."
+            exit 1
+          fi
