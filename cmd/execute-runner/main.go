@@ -1,7 +1,7 @@
 // Command execute-runner is the self-hosted execute runtime: it interprets a
 // field-shortcut DSL at request time (fetch external APIs + map the response)
 // for private-deployment customers who have no Feishu basekit FaaS. See
-// EXECUTE_RUNTIME.md.
+// docs/EXECUTE_RUNTIME.md.
 //
 // It is the FaaS-replacement: the container renderer (or the api BFF, call-chain
 // B) POSTs a (DSL, inputs, auth) triple to /execute and gets back the mapped

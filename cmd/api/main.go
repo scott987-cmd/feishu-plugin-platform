@@ -1,5 +1,5 @@
 // Command api is the BFF/gateway service: app-definition CRUD, generation proxy,
-// and the mock renderer (web/). See README.md / PRODUCTION.md.
+// and the mock renderer (web/). See README.md / docs/PRODUCTION.md.
 package main
 
 import (

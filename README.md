@@ -9,7 +9,7 @@
 
 A natural-language → basekit plugin generator for organizations using Feishu (**standard SaaS or privately-deployed — both supported**): they have Bitable and the plugin capability, but **no plugin marketplace and no in-house dev team**. You type one sentence; the platform emits a standard, human-readable basekit TypeScript project that goes through Feishu's normal upload + review chain.
 
-It also ships the **delivery** side enterprises care about: a **self-hosted execute runtime** (connectors / field shortcuts call external APIs through your own server — no external function hosting) and **one-click release + deploy** (`scripts/release.sh`). See **[`OPERATIONS.md`](OPERATIONS.md)**.
+It also ships the **delivery** side enterprises care about: a **self-hosted execute runtime** (connectors / field shortcuts call external APIs through your own server — no external function hosting) and **one-click release + deploy** (`scripts/release.sh`). See **[`OPERATIONS.md`](docs/OPERATIONS.md)**.
 
 ---
 
@@ -35,7 +35,7 @@ A private Feishu deployment ships with the basekit plugin capability but, by des
 
 This platform closes that gap. A non-engineer states a need in plain language; the platform produces a **real basekit project whose source a security/compliance team can read line by line before it is ever uploaded**. The generated TypeScript is the deliverable — not an opaque binary, not a hosted runtime you have to trust. For 信创 / 政企 customers, "audit it yourself, then submit it for review" is the selling point, not a caveat.
 
-There is no self-hostable runtime: the runtime is **always** Feishu's basekit FaaS. So the generator's only job is to emit a correct, standard basekit project — and to make that project trustworthy by construction.
+On **standard (public-cloud) Feishu** the runtime is Feishu's own basekit FaaS, so the generator's job is simply to emit a correct, standard, auditable project. **Privately-deployed Feishu has no FaaS** — so connector / field-shortcut execution runs on a **self-hosted execute runtime** you deploy (`cmd/execute-runner`: a DSL *interpreter*, not a code sandbox — no user JS, SSRF-guarded; see [`docs/EXECUTE_RUNTIME.md`](docs/EXECUTE_RUNTIME.md)). Either way the deliverable a security/compliance team reads is the **generated TypeScript**, not an opaque binary or a hosted runtime you have to trust.
 
 ---
 
@@ -244,24 +244,29 @@ The generated source is meant to survive a hostile read by a compliance team.
 ```
 .
 ├── cmd/
-│   ├── api/             BFF / gateway: proxies NL generation + serves the web platform
+│   ├── api/             BFF / gateway: app CRUD, NL-generation proxy, /api/execute forward, auth
 │   ├── generator/       NL → DSL service (holds the LLM key); /shortcut/* and /action/* endpoints
+│   ├── execute-runner/  self-hosted execute runtime — the FaaS replacement for private deployments
 │   ├── shortcutgen/     CLI: -nl (NL) / -action (automation) / -out (scaffold)
-│   └── bitable-bootstrap/  one-shot helper to create a backing Bitable via app credentials
+│   └── bitable-bootstrap/  one-shot helper to create the backing Bitable via app credentials
 ├── internal/
-│   ├── shortcut/        the main line — field-shortcut + action DSL, validation, expr, render, scaffold, zip
-│   │   ├── dsl.go         FieldShortcut DSL + Validate
-│   │   ├── action.go      Action (addAction) DSL + Validate + render + scaffold/zip
-│   │   ├── expr.go        expression allowlist (validate) + safe JS lowering (translate)
-│   │   └── render.go      FieldShortcut → auditable basekit TS project
+│   ├── shortcut/        field-shortcut + action DSL: validation, expr allowlist, render, scaffold, zip
+│   ├── execrt/          DSL interpreter behind execute-runner (no user JS; SSRF-guarded)
 │   ├── generator/       LLM integration: DeepSeek (default) + Claude (opt-in), forced tool call + auto-repair
-│   ├── dsl/ · store/ · api/ · httpx/   supporting packages (earlier app-definition track, BFF, helpers)
-├── web/
-│   └── shortcut.html    the web platform (field-shortcut / automation toggle, auditable source, zip download)
-└── plugin/              ⚠️ earlier prototype (read-only view extension) — see below
+│   ├── dsl/             AppDefinition DSL for the container renderer
+│   ├── store/           definitions + per-user plugins (Bitable-backed, read-cached, table-scoped)
+│   ├── auth/            Feishu OAuth + signed session
+│   └── api/ · httpx/    BFF handlers + HTTP server helpers
+├── plugin/block/        the in-Bitable container widget (opdev) — renders an AppDefinition / enrich DSL live
+├── plugin-center/       catalog of example generated plugins (one directory each)
+├── web/                 shortcut.html (NL authoring UI) + index.html (mock renderer; dev only)
+├── publisher/           opdev / console publishing automation (RPA)
+├── deploy/              docker compose (prod) + k8s manifests + Caddy
+├── scripts/             release / deploy / publish-plugin / manage-plugins / refresh-sdk-enums
+└── docs/                index.html (landing) + PRODUCTION · OPERATIONS · EXECUTE_RUNTIME · ROADMAP · design
 ```
 
-> **Note on `plugin/` (and the older app-definition DSL / `web/index.html`):** these are an **earlier iteration** — a read-only Bitable *view* extension that rendered a declarative chart/stat DSL inside an audited container. The project has since **pivoted (2026-06-22)** to the basekit field-shortcut / automation generator. The current main line is **`internal/shortcut` + `cmd/shortcutgen` + `web/shortcut.html`**; `plugin/` is kept as a historical prototype.
+> **Two current tracks, both live:** (1) the **generator** — NL → auditable basekit project (`internal/shortcut` + `cmd/shortcutgen` + `web/shortcut.html`), uploaded through Feishu's normal review chain; and (2) the **container renderer** — `plugin/block` (opdev SDK) renders an `AppDefinition`/`enrich` DSL pulled from the platform API *directly inside a Bitable*, so a small-team author publishes a **definition** (data), not a freshly-reviewed plugin each time. `internal/dsl` + `internal/store` + the container are this track. An earlier standalone `@lark-base-open/js-sdk` renderer (`frontend/`) was superseded by `plugin/block` and removed; `web/index.html` remains only as the dev mock renderer.
 
 ---
 
@@ -282,7 +287,7 @@ The generated source is meant to survive a hostile read by a compliance team.
 - **Expression grammar:** carefully widen atoms/operators while keeping the strict allowlist invariant.
 - **Platform:** persistence of generated definitions; one-click path from generate → review → upload.
 
-(See `ROADMAP.md` for the broader capability survey of the Feishu plugin ecosystem — note it largely maps the earlier container/DSL view-extension direction.)
+(See `docs/ROADMAP.md` for the broader capability survey of the Feishu plugin ecosystem — note it largely maps the earlier container/DSL view-extension direction.)
 
 ---
 

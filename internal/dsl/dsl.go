@@ -60,7 +60,7 @@ type Component struct {
 	// render the mapped result. ExecuteDSL is the inline field-shortcut DSL —
 	// opaque here (kept as raw JSON); the runner re-validates it. This is the
 	// red-zone "call an external API per row" capability, run on our own backend
-	// (no Feishu FaaS). See EXECUTE_RUNTIME.md.
+	// (no Feishu FaaS). See docs/EXECUTE_RUNTIME.md.
 	InputField string          `json:"inputField,omitempty"` // host column whose cell is the execute input
 	FormKey    string          `json:"formKey,omitempty"`    // the field-shortcut formItem key InputField maps to
 	ExecuteDSL json.RawMessage `json:"executeDsl,omitempty"` // inline field-shortcut DSL (runner validates)

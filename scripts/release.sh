@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 一键「发版 + 部署」编排:先部署后端(api/generator/execute-runner/caddy),
 # 再构建并上传容器插件 widget。最后的「控制台选版本 + 发 app 版本」需 1 次人工点击
-# (免审租户即时;全自动化路径见 OPERATIONS.md)。
+# (免审租户即时;全自动化路径见 docs/OPERATIONS.md)。
 #
 # 用法:  scripts/release.sh ["更新说明"]
 set -euo pipefail

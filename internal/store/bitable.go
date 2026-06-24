@@ -132,7 +132,7 @@ func (s *BitableStore) invalidate() {
 // Put creates or updates the record for def.ID with a server-authoritative
 // version. find+write is serialized by mu so concurrent Puts for one id don't
 // create duplicate rows or race the version (per process; cross-replica safety
-// still needs a backend constraint — see PRODUCTION.md).
+// still needs a backend constraint — see docs/PRODUCTION.md).
 func (s *BitableStore) Put(ctx context.Context, def dsl.AppDefinition) (dsl.AppDefinition, error) {
 	ctx, cancel := derive(ctx)
 	defer cancel()

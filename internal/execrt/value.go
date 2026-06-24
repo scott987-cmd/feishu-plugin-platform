@@ -3,7 +3,7 @@
 // into output values) instead of compiling it to a basekit TypeScript project.
 //
 // This is the runtime that replaces Feishu's basekit FaaS for private-deployment
-// customers, who have no FaaS service (see EXECUTE_RUNTIME.md). The same
+// customers, who have no FaaS service (see docs/EXECUTE_RUNTIME.md). The same
 // declarative DSL drives both paths; here it is interpreted, never eval'd:
 //   - expressions go through the allowlisted grammar (shortcut.ValidateExpr),
 //   - every outbound URL host is checked against the plugin's domain allowlist,

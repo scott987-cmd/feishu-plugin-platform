@@ -9,7 +9,7 @@ import (
 )
 
 // handleExecute is call-chain B: the BFF forwards an execute request to the
-// self-hosted execute-runner (the FaaS replacement; see EXECUTE_RUNTIME.md).
+// self-hosted execute-runner (the FaaS replacement; see docs/EXECUTE_RUNTIME.md).
 // The runner is internal-only — this is the single authenticated, audited entry
 // the in-Feishu container plugin calls. Two input shapes:
 //   - inline {dsl, inputs, auth}                  — caller already has the DSL

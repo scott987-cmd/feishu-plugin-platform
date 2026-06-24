@@ -43,10 +43,10 @@ opdev upload ./dist
 ## ⚠️ 上传前必须做的两件事
 
 1. **填 `blockTypeID`**:在[开发者后台](https://open.feishu.cn/app/cli_xxxxxxxxxxxxxxxx) 给应用 `cli_xxxxxxxxxxxxxxxx` 注册一个「数据表视图插件」扩展,拿到 `blockTypeID`,替换 `block/block.json` 里的 `REPLACE_WITH_YOUR_BLOCK_TYPE_ID`,重新 build。
-2. **后端先部署**:`PLATFORM_API_BASE` 必须指向已上线的后端网关(见根目录 PRODUCTION.md),否则插件连不上。
+2. **后端先部署**:`PLATFORM_API_BASE` 必须指向已上线的后端网关(见docs/PRODUCTION.md),否则插件连不上。
 
 ## 说明
 
 - 工程由官方模板 + 手工移植代码而成(opdev create 的交互流需要 console 注册扩展,此处直接搭好工程,blockTypeID 留占位)。
 - `typecheck` 脚本若不存在,直接 `./node_modules/.bin/tsc --noEmit`。
-- 仓库另有 `frontend/`:是早期手搓的 `@lark-base-open/js-sdk` 原型 + 本地 mock 渲染器参照,**已被本工程取代**,可删。
+- 本工程(opdev SDK)是平台**唯一在用**的容器插件;早期 `@lark-base-open/js-sdk` 版(`frontend/`)已被取代并移除。

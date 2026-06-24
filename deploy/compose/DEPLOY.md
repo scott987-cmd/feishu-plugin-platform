@@ -135,6 +135,6 @@ docker compose -f docker-compose.prod.yml ps
 
 ## 注意事项
 
-- **前端内嵌 token 对终端用户可见** → 仅适合"企业内部自用、插件只发本企业";面向多用户/外部要升级到用户级鉴权(见 `PRODUCTION.md` §7)。
-- `STORE=bitable` 把定义持久化到多维表格;多副本下的唯一约束/限流等生产边界见 `PRODUCTION.md` §8。
+- **前端内嵌 token 对终端用户可见** → 仅适合"企业内部自用、插件只发本企业";面向多用户/外部要升级到用户级鉴权(见 `docs/PRODUCTION.md` §7)。
+- `STORE=bitable` 把定义持久化到多维表格;多副本下的唯一约束/限流等生产边界见 `docs/PRODUCTION.md` §8。
 - 想升级到 k8s:`deploy/k8s/` 已备好(Deployment/HPA/Ingress/NetworkPolicy/PDB);届时把镜像推到 registry、用 cert-manager + Ingress 出 TLS 即可。

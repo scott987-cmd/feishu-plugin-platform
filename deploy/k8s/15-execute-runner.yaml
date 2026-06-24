@@ -2,7 +2,7 @@
 # (no basekit FaaS). Interprets a field-shortcut DSL at request time — fetch
 # external APIs (per-plugin domain allowlist + SSRF guard) and map the response.
 # Internal only: reached by the api (call-chain B), never the public ingress.
-# See EXECUTE_RUNTIME.md.
+# See docs/EXECUTE_RUNTIME.md.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

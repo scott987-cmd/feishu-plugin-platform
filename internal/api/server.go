@@ -43,7 +43,7 @@ type Config struct {
 
 	// ExecuteRunnerURL is the internal base URL of the self-hosted execute-runner
 	// (the FaaS replacement). Empty disables POST /api/execute (503). See
-	// EXECUTE_RUNTIME.md. ExecuteRunnerToken is the bearer the runner expects.
+	// docs/EXECUTE_RUNTIME.md. ExecuteRunnerToken is the bearer the runner expects.
 	ExecuteRunnerURL   string
 	ExecuteRunnerToken string
 }

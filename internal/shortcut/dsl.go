@@ -6,7 +6,7 @@
 // natural-language → field-shortcut generator for private-deployment customers
 // who have a Bitable + plugin capability but no marketplace and no dev team.
 //
-// Two runtime targets (see EXECUTE_RUNTIME.md):
+// Two runtime targets (see docs/EXECUTE_RUNTIME.md):
 //   - Public cloud: emit a standard basekit project for the official
 //     opdev/basekit upload+review chain (Feishu's basekit FaaS runs execute).
 //   - Private deployment: there is NO Feishu FaaS — internal/execrt INTERPRETS

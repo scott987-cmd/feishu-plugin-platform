@@ -1,5 +1,5 @@
 # feishu-plugin-platform — common dev & ops tasks.
-# Local dev uses STORE=memory; production uses STORE=bitable (see PRODUCTION.md).
+# Local dev uses STORE=memory; production uses STORE=bitable (see docs/PRODUCTION.md).
 
 REGISTRY ?= your-registry
 VERSION  ?= 0.1.0
@@ -53,6 +53,3 @@ push: ## push images
 k8s-apply: ## apply k8s manifests (edit deploy/k8s secrets/config first)
 	kubectl apply -f deploy/k8s/
 
-.PHONY: frontend-build
-frontend-build: ## typecheck + build the Feishu container plugin
-	cd frontend && npm install && npm run typecheck && npm run build

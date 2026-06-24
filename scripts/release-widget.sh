@@ -3,7 +3,7 @@
 #   1) 把真实 appId / blockTypeID 注入 app.json / block.json(仓库内存的是占位符)
 #   2) webpack 构建,把后端地址 + Bearer 注入 bundle(DefinePlugin)
 #   3) opdev upload 上传一个新 widget 版本(非交互:-v patch -d ...)
-# 上传成功后,最后一步「在控制台选版本 + 发 app 版本」见 OPERATIONS.md(免审租户即时生效)。
+# 上传成功后,最后一步「在控制台选版本 + 发 app 版本」见 docs/OPERATIONS.md(免审租户即时生效)。
 #
 # 用法:  scripts/release-widget.sh ["更新说明"]
 # 配置:  scripts/deploy.env(见 deploy.example.env)
@@ -60,5 +60,5 @@ cat <<EOF
    1) 打开  https://open.feishu.cn/app/$FEISHU_APP_ID/blocks/$WIDGET_BLOCK_TYPE_ID
    2) 标题旁「编辑」铅笔 → 小组件版本下拉选「X.Y.Z(待更新)」→ 保存
    3)「版本管理与发布」→ 创建版本 → 确认发布
-   详见 OPERATIONS.md(含 opdev headless / 应用版本 API 的全自动化路径)。
+   详见 docs/OPERATIONS.md(含 opdev headless / 应用版本 API 的全自动化路径)。
 EOF

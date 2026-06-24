@@ -37,7 +37,7 @@ data:
   # Cap /api/generate per minute to protect the LLM budget.
   GENERATE_RPM: "60"
   # Internal URL of the self-hosted execute-runner (FaaS replacement). The api
-  # forwards POST /api/execute here (call-chain B). See EXECUTE_RUNTIME.md.
+  # forwards POST /api/execute here (call-chain B). See docs/EXECUTE_RUNTIME.md.
   EXECUTE_RUNNER_URL: "http://execute-runner:80"
 ---
 apiVersion: v1
