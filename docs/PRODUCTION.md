@@ -129,3 +129,24 @@ opdev upload ./dist
 - **怎么彻底关** —— **`AI_ENABLED=false`**:任何 NL 都不再调用 LLM(只用模板 + 确定性关键词路由),提示词**永不出域**。
 - **启动透明** —— generator 启动日志会明确打印当前是「AI ON → 出域到 \<endpoint\>」「DISABLED」还是「无 key 退化关键词路由」,合规审计直接看这一行。
 - **默认** —— `AI_ENABLED=true`;未配 `DEEPSEEK_API_KEY` 时 NL 自动退化为关键词路由(等效不出域)。
+
+## 10. 灾备与备份
+
+平台的"系统级数据"(应用 / 插件定义 + 归属)存在飞书多维表格里(`STORE=bitable`),无外部数据库。durability 由飞书托管,但**误删 / 人为误改 / 应用失权**仍需有备份与恢复预案。
+
+**备份什么** —— 两张表,都在同一个 Base 内:
+- 定义表 `FEISHU_BITABLE_TABLE_ID`(字段 id/name/version/definition)
+- 插件归属表 `FEISHU_PLUGINS_TABLE_ID`(若启用了持久化 per-user 归属)
+
+**三层备份(从权威到便捷)**
+1. **飞书 Base 副本/快照(权威全量,推荐)** —— 在多维表格里「⋯ → 创建副本」做整库快照,或用云空间 API 复制该 Base(`drive +copy`)。一份副本即覆盖上面两张表 + 结构。建议固定节奏(如每日/每周)+ 命名带日期。**RPO** = 两次副本的间隔;**RTO** = 切到副本/重导的时间。
+2. **脚本化记录级导出(便捷、可 cron)** —— `scripts/backup-defs.sh [输出目录]` 把 `GET /api/apps` 全量应用定义 dump 成带时间戳 JSON(只读、自动保留最近 30 份),适合放进 cron(`0 3 * * * …`)。这是"定义目录"的轻量副本,便于 diff / 快速回灌。
+3. **(可选)记录级 API 导出** —— 如需把插件归属表也脚本化导出,用飞书 `bitable records list` 全量拉取该表 → JSON。
+
+**恢复**
+- 从 Base 副本恢复:把副本设为新的数据 Base(更新 `FEISHU_BITABLE_APP_TOKEN`/`TABLE_ID` 指向它),或把副本里的记录回灌到原表。
+- 从 JSON 回灌定义:逐条 `POST /api/apps`(admin token)写回(渲染器即时生效,零发版)。
+
+**加固(防误改)** —— 把数据 Base 的人工编辑权限收紧(仅管理员 / 只读共享),避免有人在表里手改定义导致渲染异常;定义的唯一可信写入口是平台 API。
+
+> 边界:Base 副本/记录导出的具体入口与配额以你的飞书控制台为准;首次请在目标环境验证一次"副本 → 切换 → 恢复"全流程,确认 RPO/RTO 满足要求。

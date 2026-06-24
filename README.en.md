@@ -266,7 +266,7 @@ The generated source is meant to survive a hostile read by a compliance team.
 ├── web/                 shortcut.html (NL authoring UI) + index.html (mock renderer; dev only)
 ├── publisher/           opdev / console publishing automation (RPA)
 ├── deploy/              docker compose (prod) + k8s manifests + Caddy
-├── scripts/             release / deploy / publish-plugin / manage-plugins / refresh-sdk-enums
+├── scripts/             release / deploy / publish-plugin / manage-plugins / refresh-sdk-enums / backup-defs
 └── docs/                index.html (landing) + PRODUCTION · OPERATIONS · EXECUTE_RUNTIME · ROADMAP · design
 ```
 

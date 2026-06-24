@@ -129,3 +129,24 @@ The platform calls an LLM only during **natural-language generation**. The egres
 - **How to fully disable** — **`AI_ENABLED=false`**: no NL ever calls the LLM (templates + the deterministic keyword router only); prompts **never egress**.
 - **Boot-time transparency** — the generator's startup log explicitly prints whether it is "AI ON → egress to \<endpoint\>", "DISABLED", or "no key → keyword-router fallback" — compliance audits can read this one line.
 - **Defaults** — `AI_ENABLED=true`; when `DEEPSEEK_API_KEY` is unset, NL automatically degrades to the keyword router (equivalent to no egress).
+
+## 10. Disaster Recovery & Backup
+
+The platform's system-of-record (app / plugin definitions + ownership) lives in Feishu Bitable (`STORE=bitable`), with no external database. Feishu manages durability, but you still need a backup + restore plan for **accidental deletion / human mis-edits / the app losing access**.
+
+**What to back up** — two tables, both inside the same Base:
+- the definitions table `FEISHU_BITABLE_TABLE_ID` (fields id/name/version/definition)
+- the plugin-ownership table `FEISHU_PLUGINS_TABLE_ID` (if persistent per-user ownership is enabled)
+
+**Three backup layers (authoritative → convenient)**
+1. **Feishu Base copy/snapshot (authoritative, full, recommended)** — in Bitable, "⋯ → Make a copy" for a whole-Base snapshot, or copy the Base via the Drive API (`drive +copy`). One copy covers both tables + the schema. Do it on a fixed cadence (e.g. daily/weekly) with a dated name. **RPO** = the interval between copies; **RTO** = the time to switch to / re-import a copy.
+2. **Scriptable record-level export (convenient, cron-able)** — `scripts/backup-defs.sh [outdir]` dumps the full app-definition catalog from `GET /api/apps` to a timestamped JSON (read-only; auto-retains the latest 30). Drop it in cron (`0 3 * * * …`). This is a lightweight copy of the "definition catalog," handy for diffing / quick re-import.
+3. **(Optional) record-level API export** — to also script-export the ownership table, use Feishu `bitable records list` to pull that table in full → JSON.
+
+**Restore**
+- From a Base copy: point the platform at the copy as the new data Base (update `FEISHU_BITABLE_APP_TOKEN`/`TABLE_ID`), or re-import the copy's records into the original table.
+- From the JSON: re-apply definitions one by one via `POST /api/apps` (admin token) — the renderer picks them up immediately, no release needed.
+
+**Hardening (prevent mis-edits)** — restrict human edit access to the data Base (admins only / read-only sharing) so nobody hand-edits a definition into a broken state; the only trusted write path for definitions is the platform API.
+
+> Boundary: the exact entry points and quotas for Base copies / record export depend on your Feishu console; before relying on it, run the full "copy → switch → restore" drill once in the target environment and confirm RPO/RTO meet your requirements.
