@@ -123,7 +123,7 @@
   .hero-meta .pill svg { color: var(--brand-2); flex: none; }
 
   /* ---------- Audience ---------- */
-  .audience-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .audience-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; }
   .ac-card {
     background: var(--bg-tint); border: 1px solid var(--line); border-radius: var(--radius);
     padding: 26px 24px;
@@ -449,6 +449,11 @@
         <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 7l10 5 10-5M2 17l10 5 10-5"/></svg></div>
         <h3>一键发版 + 部署</h3>
         <p>后端(api / generator / execute-runner / caddy)+ 容器插件 widget,一条命令构建、上传、滚动重启。compose 单机或 <code>k8s</code> 皆可,平滑切换。</p>
+      </div>
+      <div class="ac-card">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg></div>
+        <h3>多维表格即存储 · 零外部数据库</h3>
+        <p>平台自身的数据(插件定义 / 归属)也存进<b>多维表格</b>——<b>不引入 Postgres/Redis 等外部数据库</b>,私有化少一个要部署、加固、备份的组件;durability 由飞书托管,管理员还能在表里直接查看、审计每条定义。读路径带 TTL 缓存 + 按表查询,适配读密集的大规模使用。</p>
       </div>
     </div>
 
