@@ -22,9 +22,8 @@ There are two distinct execution hosts, depending on how a plugin ships:
 | Plugin uploaded to Feishu | Runs on Feishu's **basekit FaaS**; field-shortcut publishing goes through the official form + manual review; the public-cloud third-party **field** execute FaaS is gated (official/Volcano only), and official extensions only open up the three categories of record view / data table view / automation; `block-basekit-cli` has no field upload command | Use Feishu's FaaS |
 | Container-renderer / self-hosted track | Runs on the **self-hosted execute-runner** — one auditable runtime where all execute/connector traffic converges | Self-host the runner |
 
-> 📌 **Outdated assumption to be corrected in the code**: the header comment of `internal/shortcut/dsl.go` reads
-> *"The runtime is ALWAYS Feishu's basekit FaaS — there is no self-hostable runtime"*.
-> This assumption **does not hold for the container-renderer / self-hosted track**. This design is precisely about turning the "self-hostable runtime" into reality.
+> 📌 **Outdated assumption, now corrected**: the header comment of `internal/shortcut/dsl.go` once read *"The runtime is ALWAYS Feishu's basekit FaaS — there is no self-hostable runtime"*.
+> That assumption **does not hold for the container-renderer / self-hosted track**; the comment has been updated, and this design makes the "self-hostable runtime" real.
 > Note that we preserve the dual goal: plugins uploaded to Feishu can still take the "generate a standard basekit project → opdev upload" path and run on basekit FaaS; the container-renderer / self-hosted track takes the "self-hosted execute runtime" path. One and the same execute DSL, two hosts.
 
 This also explains the watershed of the entire architecture:

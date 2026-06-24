@@ -20,9 +20,8 @@
 | 飞书公有云 | 第三方**字段** execute FaaS 被网关锁死（仅官方/火山）；官方扩展只开放 记录视图/数据表视图/自动化 三类；`block-basekit-cli` 无字段上传命令；字段捷径官方发布走表单+人工审核 | 不可自助 |
 | **容器渲染轨 / 自托管轨** | 出网、凭证、审计、限流需要**集中到一个可审计的出网点**，而非每个插件各自散调外部 API | 需自托管 execute 运行时 |
 
-> 📌 **代码里待修正的过时假设**：`internal/shortcut/dsl.go` 头部注释写着
-> *"The runtime is ALWAYS Feishu's basekit FaaS — there is no self-hostable runtime"*。
-> 这条假设对**容器渲染轨的 execute 类插件不成立**。本设计正是要把「self-hostable runtime」变成现实。
+> 📌 **已修正的过时假设**：`internal/shortcut/dsl.go` 头部曾写「runtime is ALWAYS Feishu's basekit FaaS — there is no self-hostable runtime」。
+> 这条假设对**容器渲染轨的 execute 类插件不成立**;注释已更新,本设计把「self-hostable runtime」落为现实。
 > 注意保留双路径：上传到飞书的插件仍走「生成标准 basekit 工程 → opdev 上传 → 跑在飞书 basekit FaaS」路径；容器渲染轨的连接器 / 字段捷径执行走「自托管 execute 运行时」路径。同一份 execute DSL，两个宿主。
 
 这也解释了整套架构的分水岭：
