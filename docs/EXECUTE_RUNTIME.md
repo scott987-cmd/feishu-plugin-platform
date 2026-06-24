@@ -3,13 +3,13 @@
 # 自托管 Execute 运行时设计 · 容器渲染轨的连接器 / 字段捷径执行
 
 > 状态：设计稿（2026-06-23）。对应 `design.md` **Phase 4**、`ROADMAP.md` 🔴 红区（自动化 execute / 字段公式连接器扩展）。
-> 决策来源：用户 2026-06-23 明确「私有化没有 FaaS 服务，这也是我让你搞 k8s 的原因之一」。
+> 设计动机：容器渲染轨的 execute 类能力（字段捷径 / 连接器，要调外部 API 算出一列）需要一个自托管、可审计的执行运行时——把出网 / 凭证 / 审计 / 限流收口到一个可审计的咽喉点；这也是它跑在 k8s 上的原因之一。
 
 ---
 
 ## 0. 一句话
 
-绿区/黄区的**只读数据视图**靠容器渲染引擎在飞书 webview 客户端跑、不需要任何后端运行时；但红区的 **execute 类插件（字段捷径 / 连接器，要调外部 API 算出一列）需要一个能跑 `execute` 的运行时**。飞书云的这套 FaaS 在私有化部署里**不存在**，公有云第三方字段 FaaS 又被网关锁死。因此 execute 类能力唯一现实的归宿，是**我们自己在 k8s 上托管的一个执行运行时**——本文设计它。
+绿区/黄区的**只读数据视图**靠容器渲染引擎在飞书 webview 客户端跑、不需要任何后端运行时；但红区的 **execute 类插件（字段捷径 / 连接器，要调外部 API 算出一列）需要一个能跑 `execute` 的运行时**。这类能力如果让每个插件各自散调外部 API，出网、凭证、审计、限流就无处收口；公有云第三方字段 FaaS 又被网关锁死。因此 execute 类能力唯一现实的归宿，是**我们自己在 k8s 上托管的一个执行运行时**，把对外调用集中到一个可审计的出网点——本文设计它。
 
 ---
 
@@ -18,16 +18,16 @@
 | 部署形态 | execute 运行时现状 | 结论 |
 |---|---|---|
 | 飞书公有云 | 第三方**字段** execute FaaS 被网关锁死（仅官方/火山）；官方扩展只开放 记录视图/数据表视图/自动化 三类；`block-basekit-cli` 无字段上传命令；字段捷径官方发布走表单+人工审核 | 不可自助 |
-| 飞书**私有化** | **根本没有 FaaS 服务** | 无云端运行时 |
+| **容器渲染轨 / 自托管轨** | 出网、凭证、审计、限流需要**集中到一个可审计的出网点**，而非每个插件各自散调外部 API | 需自托管 execute 运行时 |
 
 > 📌 **代码里待修正的过时假设**：`internal/shortcut/dsl.go` 头部注释写着
 > *"The runtime is ALWAYS Feishu's basekit FaaS — there is no self-hostable runtime"*。
-> 这条假设对**私有化客户不成立**。本设计正是要把「self-hostable runtime」变成现实。
-> 注意保留双目标：公有云客户仍可走「生成标准 basekit 工程 → opdev 上传」路径；私有化客户走「自托管 execute 运行时」路径。同一份 execute DSL，两个宿主。
+> 这条假设对**容器渲染轨的 execute 类插件不成立**。本设计正是要把「self-hostable runtime」变成现实。
+> 注意保留双路径：上传到飞书的插件仍走「生成标准 basekit 工程 → opdev 上传 → 跑在飞书 basekit FaaS」路径；容器渲染轨的连接器 / 字段捷径执行走「自托管 execute 运行时」路径。同一份 execute DSL，两个宿主。
 
 这也解释了整套架构的分水岭：
 - **只读数据视图**（stat/chart/table/gauge/pivot/…，已实现 12 渲染器 9 算子）→ 容器渲染引擎读 DSL，用 `@lark-base-open/js-sdk` 在 webview 里直接读宿主数据渲染。**无 execute、无新出网、无写入**，所以无需任何后端运行时。
-- **execute 类**（字段捷径/连接器）→ 要发起对外 HTTP（如 Open-Meteo）并把响应映射成输出列。这一步在私有化下没有飞书 FaaS 可托管 → 必须落到我们的 k8s。
+- **execute 类**（字段捷径/连接器）→ 要发起对外 HTTP（如 Open-Meteo）并把响应映射成输出列。这一步需要把出网/凭证/审计/限流收口到一处 → 必须落到我们的 k8s。
 
 ---
 
@@ -35,11 +35,11 @@
 
 官方文档证实了我们要复刻的模式，并给了关键事实（来源：飞书官方「AI 编程实践」+「字段捷径插件（FaaS 版）- 开发指南」+ `Lark-Base-Team/field-demo` + `@lark-opdev/block-basekit-server-api` 类型定义）：
 
-1. **FaaS 捷径本质 = 部署在飞书服务器的 nodejs 函数**（linux-x64 / Node 14.21.0 / 1核1G / 超时 15min / 2–4 并发 / 队列 1w / 排队 1h）。**这就是私有化没有、需要我们自托管替代的东西。**
-2. **官方推荐的「重活外包」模式**：捷径 `execute` 通过 `addDomainList` 白名单 `fetch` 一个**外部后端服务**（官方示例把 Markitdown 部署在 replit + API key 鉴权；示例捷径「AI 文件转文本 / 附件转文本 / 短链生成器」都是这个形态）。**这正是 execute-runner 的角色** —— 区别只是宿主从 replit(公有云) 换成客户自己的 k8s。
+1. **FaaS 捷径本质 = 部署在飞书服务器的 nodejs 函数**（linux-x64 / Node 14.21.0 / 1核1G / 超时 15min / 2–4 并发 / 队列 1w / 排队 1h）。**这是上传到飞书的插件所走的宿主；容器渲染轨的 execute 则需要我们自托管的等价物。**
+2. **官方推荐的「重活外包」模式**：捷径 `execute` 通过 `addDomainList` 白名单 `fetch` 一个**外部后端服务**（官方示例把 Markitdown 部署在 replit + API key 鉴权；示例捷径「AI 文件转文本 / 附件转文本 / 短链生成器」都是这个形态）。**这正是 execute-runner 的角色** —— 区别只是宿主从 replit(公有云) 换成我们自托管的 k8s。
 3. **流量验签机制 `baseSignature` + `packID`**：捷径请求外部后端时携带签名头，后端用开发者公钥验签，确认请求确实来自飞书 Base。→ 我们的 runner 在被 webview/api 调用时也要有等价的**请求来源校验**（见 §6 验证模型）。
 
-**校准结论**：execute-runner 定位为**「所有 execute/连接器插件收口的单一自托管后端」**——不是每个插件各自散调外部 API，而是统一经 runner 出网。好处：出网白名单、凭证处理、审计、限流**集中一处**，私有化客户只需审计这一个出网点。这比官方「每个捷径各连各的 replit」更可控，是我们的差异化。
+**校准结论**：execute-runner 定位为**「所有 execute/连接器插件收口的单一自托管后端」**——不是每个插件各自散调外部 API，而是统一经 runner 出网。好处：出网白名单、凭证处理、审计、限流**集中一处**，自托管客户只需审计这一个出网点。这比官方「每个捷径各连各的 replit」更可控，是我们的差异化。
 
 ### 1.5.1 从官方权威枚举对账出的生成器修正
 - 🐞 **已修**：`shortcut.ValidFormatters` 原含 `PERCENT_ROUNDED_2`（SDK 枚举里**不存在**），LLM 选中会生成无效 `NumberFormatter.PERCENT_ROUNDED_2`。已据 `dist/index.d.ts` 修正为权威集合（`INTEGER / DIGITAL_ROUNDED_1..4 / DIGITAL_THOUSANDS / DIGITAL_THOUSANDS_DECIMALS / PERCENTAGE_ROUNDED / PERCENTAGE`）。
@@ -52,7 +52,7 @@
 1. 在 k8s 上提供一个无状态服务 `execute-runner`，按 execute DSL（`internal/shortcut` 的 `FieldShortcut.Execute`/`Steps` + `Expr`/`Template` 映射）发起受控对外请求并返回映射后的输出。
 2. **硬落地三条红线**（见 §4）：不执行用户 JS、不引入新出网域名、不写入。
 3. 与现有 `deploy/k8s/`（api/generator/ingress/netpol/pdb、PSS restricted、distroless nonroot）同套编排无缝接入。
-4. 私有化客户在自己的 k8s/k3s 上一键起，飞书 webview 容器插件指向客户自己的 runner URL。
+4. 自托管客户在自己的 k8s/k3s 上一键起，飞书 webview 容器插件指向客户自己的 runner URL。
 
 **非目标**
 - 不跑任意用户 JS。我们生成的 execute **本就是声明式**（URL 模板 + 白名单表达式），runtime 是**解释器不是代码沙箱**（见 §3）。任意 AI 代码片段沙箱是可选的 Phase 4b，默认不做。
@@ -95,14 +95,14 @@ FieldShortcut {
 | 红线 | 落地手段 |
 |---|---|
 | **不执行用户 JS** | runtime 解释声明式 DSL（URL 模板 + 白名单 Expr），从不 eval。Expr 复用 `internal/shortcut/expr.go` 的白名单求值（仅 `in.*`/`res.*` 取值 + `+-*/()` + `rand()`）。任意代码片段→默认拒绝，Phase 4b 才进 WASM 沙箱。 |
-| **不引入新出网域名** | **双层强制**：①运行时层——每个出站 URL 解析 host，∉ 该插件 `Domains` 即拒绝（`shortcut.CheckURLHost`）；②k8s 层——`execute-runner` 的 **egress NetworkPolicy / 出网转发代理白名单**，即使解释器有 bug，pod 也只能到声明过的 host。私有化客户审计「这个插件能连哪些外网」= 看 `Domains`。**SSRF 守卫**额外拒绝 dial 到私网/环回/链路本地 IP；当配了出网代理（`HTTP_PROXY`，即生产 egress 控制面）时放行对**该代理地址**的连接（代理是出网控制点，host 白名单仍生效），但不放行其它私网目标。 |
+| **不引入新出网域名** | **双层强制**：①运行时层——每个出站 URL 解析 host，∉ 该插件 `Domains` 即拒绝（`shortcut.CheckURLHost`）；②k8s 层——`execute-runner` 的 **egress NetworkPolicy / 出网转发代理白名单**，即使解释器有 bug，pod 也只能到声明过的 host。自托管客户审计「这个插件能连哪些外网」= 看 `Domains`。**SSRF 守卫**额外拒绝 dial 到私网/环回/链路本地 IP；当配了出网代理（`HTTP_PROXY`，即生产 egress 控制面）时放行对**该代理地址**的连接（代理是出网控制点，host 白名单仍生效），但不放行其它私网目标。 |
 | **不写入** | runtime **只 fetch + map + return**，不持有任何 Bitable / tenant 凭证，没有任何写宿主数据的代码路径。写入（若将来要）只能由 webview 里的 SDK 在用户权限下做，且是另一条显式门禁路径——不在本 runtime 内。 |
 
 **纵深防御（沿用现有 `deploy/k8s` 基线）**
 - PSS `restricted` namespace；distroless nonroot（uid 65532）、`readOnlyRootFilesystem`、`drop ALL caps`、`seccomp RuntimeDefault`、`allowPrivilegeEscalation:false`——直接抄 `20-api.yaml` 的 securityContext。
 - 资源 `requests/limits`（CPU/内存）+ 每请求**超时**（防慢响应/SSRF 拖死）+ 响应体大小上限（已生成代码里有 `text.slice(0,4000)` 雏形）。
 - 入站 NetworkPolicy：只允许 `api`（或渲染器经 ingress）打到 `execute-runner`，default-deny 其余。
-- **用户 Auth 凭证**（如某 API 的 key）：随请求传入、用完即弃，**不在 runtime 落盘/缓存**；私有化下凭证不出客户集群。
+- **用户 Auth 凭证**（如某 API 的 key）：随请求传入、用完即弃，**不在 runtime 落盘/缓存**；自托管下凭证不出客户集群。
 - SSRF 防护：URL host 必须命中 `Domains` 白名单（已是红线②）；额外禁止解析到内网/链路本地地址（拒 `169.254/10./172.16/192.168/127.`）。
 
 ---
@@ -171,7 +171,7 @@ Content-Type: application/json
 官方：捷径请求外部后端带 `baseSignature`（飞书签名）+ `packID`，后端用开发者公钥验签确认来源。我们的等价物：
 - **call-chain B（推荐）**：webview→api 用现有 Bearer（`PLATFORM_API_TOKEN`）+ CORS 收敛到飞书 webview Origin；api→runner 集群内 + Bearer；runner 不暴露公网。验证集中在 api，runner 只信任 api。
 - **call-chain A（webview 直连 runner）**：才需要把官方 `baseSignature` 验签搬到 runner（公钥验签 + `packID` 校验），防止他人直接打 runner。默认走 B 即可回避。
-- 私有化下两端都在客户域内，信任边界更短；但 Bearer + CORS + TLS + 域名白名单仍是底线。
+- 自托管下两端都在客户域内，信任边界更短；但 Bearer + CORS + TLS + 域名白名单仍是底线。
 
 ---
 
@@ -183,7 +183,7 @@ Content-Type: application/json
 | `deploy/k8s/40-netpol.yaml` | 加：①入站—只允许 `app: api` 打 `app: execute-runner`;②出站—`execute-runner` egress 仅放行 DNS + 白名单 host（需 Calico/Cilium 才真正生效，flannel/kindnet 是 no-op，文档已注明） |
 | `deploy/k8s/00-namespace-config.yaml` | ConfigMap 加 `EXECUTE_RUNNER_URL`（api 转发用）、超时/体积上限等参数 |
 | `cmd/execute-runner/`（新增 Go 服务） | 复用 `internal/shortcut`（DSL 类型 + `expr.go` 求值 + Domains 校验）；纯标准库 HTTP；与 api/generator 同构 |
-| `internal/shortcut/dsl.go` | 修正头部「runtime is ALWAYS Feishu FaaS / no self-hostable runtime」过时注释为「双目标：公有云=basekit 上传；私有化=自托管 execute-runner」 |
+| `internal/shortcut/dsl.go` | 修正头部「runtime is ALWAYS Feishu FaaS / no self-hostable runtime」过时注释为「双路径：上传飞书=basekit FaaS；容器渲染轨=自托管 execute-runner」 |
 
 > **出网白名单代理可选实现**：若集群 CNI 不支持 egress netpol，用一个 forward proxy（如带 allowlist 的 squid/envoy）做 `execute-runner` 的唯一出网口，runner 的 `HTTP_PROXY` 指向它，代理按全集群插件 `Domains` 并集放行。这样红线②不依赖 CNI。
 
@@ -194,7 +194,7 @@ Content-Type: application/json
 **已定：**
 1. **调用链 = B**（webview→api→runner，runner 不公网暴露，验证/限流/审计集中在 api）。
 2. **runtime 只读** —— 严格 fetch + map + return，不持 Bitable 凭证、无写路径（红线③）。写回宿主列（若将来要）走 webview SDK 在用户权限下做，另案。
-3. **用户 Auth 凭证** —— 私有化下只存客户集群（Secret / 定义表），绝不出集群；运行时随请求带入、用完即弃、不落盘。
+3. **用户 Auth 凭证** —— 自托管下只存客户集群（Secret / 定义表），绝不出集群；运行时随请求带入、用完即弃、不落盘。
 4. **执行模型 = 解释声明式 DSL**（红线①由构造保证）；Phase 4b 的 quickjs 任意代码沙箱**默认不做**，仅当模板覆盖不到再上。
 
 **剩余开放项：**
@@ -214,7 +214,7 @@ Content-Type: application/json
   - ✅ ConfigMap `EXECUTE_RUNNER_URL` + Secret `EXECUTE_RUNNER_TOKEN`；api Deployment 注入二者。
   - ✅ **调用链 B 已实现并真实验证**：`POST /api/execute`（`internal/api/execute.go`）转发到 runner；支持 inline `dsl` 与 `pluginId`(会话+插件存储取 DSL,收口模型)；单测覆盖（503未配置/inline转发+Bearer/缺参/pluginId需登录）。**真实本地端到端**：真 api → 真 runner → 真 Open-Meteo，`/api/execute` 返回北京 26℃/7.6km/h。
   - ✅ k8s YAML 全部语法校验通过（结构镜像已 kind 验证过的 20-api）。
-  - ⏳ **剩余（需用户云上基础设施，同既有 deploy 故事）**：把 execute-runner 镜像部署到 AWS/k8s（现 compose+STORE=memory），+ 容器渲染器加一条「读城市列→调 /api/execute→展示天气」的只读调用 + opdev 发版，做出**真实私有化 Bitable 里的端到端演示**。
+  - ⏳ **剩余（需用户云上基础设施，同既有 deploy 故事）**：把 execute-runner 镜像部署到 AWS/k8s（现 compose+STORE=memory），+ 容器渲染器加一条「读城市列→调 /api/execute→展示天气」的只读调用 + opdev 发版，做出**真实自托管 Bitable 里的端到端演示**。
 - **M4 加固**：资源配额、出网代理、（按需）Phase 4b 沙箱 per-app pod 隔离。
 
 ---
