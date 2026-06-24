@@ -7,7 +7,9 @@
 [![Tests](https://img.shields.io/badge/go%20test-passing-brightgreen)](#quick-start) <!-- badge placeholder -->
 [![basekit](https://img.shields.io/badge/basekit-server--api%201.0.6-0F6E56)](#what-it-generates) <!-- badge placeholder -->
 
-A natural-language → basekit plugin generator for organizations that run **privately-deployed Feishu**: they have Bitable and the plugin capability, but **no plugin marketplace and no in-house dev team**. You type one sentence; the platform emits a standard, human-readable basekit TypeScript project that goes through Feishu's normal upload + review chain.
+A natural-language → basekit plugin generator for organizations using Feishu (**standard SaaS or privately-deployed — both supported**): they have Bitable and the plugin capability, but **no plugin marketplace and no in-house dev team**. You type one sentence; the platform emits a standard, human-readable basekit TypeScript project that goes through Feishu's normal upload + review chain.
+
+It also ships the **delivery** side enterprises care about: a **self-hosted execute runtime** (connectors / field shortcuts call external APIs through your own server — no external function hosting) and **one-click release + deploy** (`scripts/release.sh`). See **[`OPERATIONS.md`](OPERATIONS.md)**.
 
 ---
 

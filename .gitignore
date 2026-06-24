@@ -118,3 +118,4 @@ publisher/screenshots/
 
 # ── Local agent / tooling data ──────────────────────────────────────────────
 .claude/
+scripts/deploy.env

@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>飞书多维表格插件生成平台 · Feishu Bitable Plugin Generator</title>
-<meta name="description" content="自然语言一句话 → 可审计的真实飞书 basekit 插件（TypeScript）。面向私有化部署飞书的企业，无需插件市场、无需开发团队。" />
+<meta name="description" content="自然语言一句话 → 可审计的真实飞书 basekit 插件（TypeScript）+ 一键发版部署 + 自托管执行运行时。面向企业飞书，无需插件市场、无需开发团队；标准飞书与私有化部署均兼容。" />
 <style>
   :root {
     --brand: #0f6e56;
@@ -324,7 +324,7 @@
     </div>
     <nav class="nav-links">
       <a href="#demo">使用演示</a>
-      <a href="#audience">为谁打造</a>
+      <a href="#runtime">自托管 / 发版</a>
       <a href="#generators">两套生成器</a>
       <a href="#capabilities">能力总览</a>
       <a href="#architecture">架构</a>
@@ -337,7 +337,7 @@
 <!-- ============ HERO ============ -->
 <section class="hero">
   <div class="wrap">
-    <span class="eyebrow"><span class="dot"></span>开源 · MIT · 面向私有化飞书</span>
+    <span class="eyebrow"><span class="dot"></span>开源 · MIT · 标准飞书与私有化均兼容</span>
     <h1>用<span class="accent">一句话</span>，生成可审计的<br/>飞书 basekit 插件</h1>
     <p class="sub">自然语言一句话描述需求 → 生成可<b>人工逐行审计</b>的真实飞书 basekit 插件（TypeScript），直接上传到飞书使用。<span class="en">NL → DSL → auditable TS → real Feishu.</span></p>
     <div class="hero-actions">
@@ -409,17 +409,54 @@
   </div>
 </section>
 
+<!-- ============ RUNTIME & DELIVERY ============ -->
+<section id="runtime" style="background:var(--bg-tint)">
+  <div class="wrap">
+    <span class="eyebrow"><span class="dot"></span>自托管执行 + 一键发版部署 · Self-hosted runtime &amp; one-click ship</span>
+    <h2 class="section-title">不依赖任何外部托管，自己的服务器上跑起来</h2>
+    <p class="section-lead">「连接器 / 字段捷径」这类要<b>调外部 API</b> 的插件,执行逻辑跑在你自己部署的 <code>execute-runner</code> 上;改完代码到上线,一条命令完成。<b>标准飞书与私有化部署用同一套</b>,这也是企业选型的关键之一。</p>
+
+    <div class="audience-grid">
+      <div class="ac-card">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12H2M5 7l-3 5 3 5M19 7l3 5-3 5"/></svg></div>
+        <h3>自托管执行运行时</h3>
+        <p>插件要调外部接口时,经 <code>api → execute-runner</code> 执行(解释声明式 DSL,<b>绝不 eval</b>)。三道硬护栏:<b>不执行用户 JS · 出网域名白名单 + SSRF 防护 · 只读不写宿主</b>。整条出网集中一处,便于审计。</p>
+      </div>
+      <div class="ac-card">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+        <h3>真机实测:城市 → 天气</h3>
+        <p>多维表格里「城市」一列,插件自动算出「温度 / 风速」一列,数据来自自托管运行时(<b>无外部托管函数</b>)。实测:Beijing 21.4℃、Tokyo 20.6℃、London 26.4℃、Paris 27.7℃。</p>
+      </div>
+      <div class="ac-card">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 7l10 5 10-5M2 17l10 5 10-5"/></svg></div>
+        <h3>一键发版 + 部署</h3>
+        <p>后端(api / generator / execute-runner / caddy)+ 容器插件 widget,一条命令构建、上传、滚动重启。compose 单机或 <code>k8s</code> 皆可,平滑切换。</p>
+      </div>
+    </div>
+
+    <div style="margin-top:1.8rem">
+      <p class="section-lead" style="margin-bottom:.7rem">改完代码 → 上线,一条命令:</p>
+      <pre style="background:var(--code-bg);color:#d7e4dd;border-radius:14px;padding:18px 20px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.7;margin:0"><span style="color:#5d7066"># 一次性配置:cp scripts/deploy.example.env scripts/deploy.env(填服务器/域名/appId）</span>
+$ <b>scripts/release.sh</b> "城市天气字段捷径"
+<span style="color:#7fd1b9">═══ ① 部署后端 ═══</span>   api · generator · execute-runner · caddy  →  滚动重启 + 健康检查 ✓
+<span style="color:#7fd1b9">═══ ② 发版 widget ═══</span> 注入后端地址 → webpack 构建 → opdev 上传新版本 ✓
+<span style="color:#5d7066"># 末步:控制台「选版本 + 发应用版本」(免审租户即时;可进一步 API 全自动)</span></pre>
+      <p class="section-lead" style="margin-top:.8rem;font-size:.95rem">脚本与完整手册见仓库 <code>scripts/</code> 与 <a href="https://github.com/scott987-cmd/feishu-plugin-platform/blob/main/OPERATIONS.md" style="color:var(--brand)">OPERATIONS.md</a>;部署细节见 <code>deploy/compose/DEPLOY.md</code> 与 <code>deploy/k8s/</code>。</p>
+    </div>
+  </div>
+</section>
+
 <!-- ============ AUDIENCE ============ -->
 <section id="audience">
   <div class="wrap">
     <span class="eyebrow"><span class="dot"></span>为谁打造 · Who it's for</span>
-    <h2 class="section-title">为私有化部署飞书的企业而生</h2>
-    <p class="section-lead">你有多维表格和插件能力，却<b>没有插件市场、也没有专职开发团队</b>。这套平台把「想要一个插件」到「拿到一份可上线、可审计的源码」之间的距离，压缩成一句话。</p>
+    <h2 class="section-title">为企业飞书而生（标准飞书与私有化均兼容）</h2>
+    <p class="section-lead">你有多维表格和插件能力，却<b>没有插件市场、也没有专职开发团队</b>。这套平台把「想要一个插件」到「拿到一份可上线、可审计的源码，并一键发版部署」之间的距离，压缩成一句话。<span class="en">Works on standard Feishu; private deployment supported.</span></p>
     <div class="audience-grid">
       <div class="ac-card">
         <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/></svg></div>
-        <h3>信创 / 政企内部</h3>
-        <p>私有化飞书、强合规诉求。源码自带 provenance，可在内部完成代码审计后再送审上线。</p>
+        <h3>强合规 / 私有化部署</h3>
+        <p>同一套既可跑在标准飞书，也<b>兼容私有化部署飞书</b>。源码自带 provenance，可在内部完成代码审计后再送审上线；执行运行时自托管在你自己的服务器上。</p>
       </div>
       <div class="ac-card">
         <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg></div>
