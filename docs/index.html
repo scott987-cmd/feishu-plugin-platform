@@ -396,16 +396,34 @@
 <section id="plugin-in-bitable">
   <div class="wrap">
     <span class="eyebrow"><span class="dot"></span>真实效果 · Plugin in action</span>
-    <h2 class="section-title">插件在飞书多维表格中的实际使用</h2>
-    <p class="section-lead">从一句话描述到生成代码、再到插件在真实多维表格中运行——两段录屏展示完整链路。<span class="en">One sentence → generated code → plugin running in a real Feishu Bitable.</span></p>
-    <figure class="demo-video" style="margin-bottom:2rem">
-      <img src="assets/plugin-generation-demo.gif" alt="一句话生成插件：输入描述→AI生成代码→下载工程" loading="lazy" style="display:block;width:100%;height:auto"/>
-      <figcaption><b>第 1 步：一句话生成插件</b> — 输入「人民币换美元」→ AI 生成完整 basekit TypeScript 源码（含汇率 API 调用、输入/输出字段定义）→ 一键下载 zip 工程。</figcaption>
-    </figure>
-    <figure class="demo-video">
-      <img src="assets/plugin-in-bitable-demo.gif" alt="插件在多维表格中运行：汇率换算演示表+自动化配置" loading="lazy" style="display:block;width:100%;height:auto"/>
-      <figcaption><b>第 2 步：插件在真实多维表格中运行</b> — 汇率换算演示表（人民币金额 → 美元金额 + 汇率）→ 打开自动化中心 → 创建自动化流程 → 选择「汇率换算自动化」插件 → 配置触发条件并启用。</figcaption>
-    </figure>
+    <h2 class="section-title">两类插件，每类都「生成 → 使用」一一对应</h2>
+    <p class="section-lead">字段捷径与自动化各一对录屏:左为<b>一句话生成</b>,右为<b>在真实多维表格中使用</b>——同一个插件,从生成到落地。<span class="en">Each plugin type: generate (left) → use it in a real Bitable (right).</span></p>
+
+    <h3 style="font-size:1.15rem;font-weight:650;margin:1.6rem 0 .2rem;color:var(--ink)">① 字段捷径 · 城市 → 天气</h3>
+    <p style="font-size:.92rem;color:var(--ink-3);margin:0 0 .9rem">在数据表里加一列「天气」,对每行的「城市」自动算出温度/风速(数据来自自托管 execute 运行时)。</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px">
+      <figure class="demo-video" style="margin:0">
+        <img src="assets/field-shortcut-demo.gif" alt="字段捷径生成:一句话→AI生成addField源码→下载工程" loading="lazy" style="display:block;width:100%;height:auto;border-radius:var(--r);border:1px solid var(--line)"/>
+        <figcaption><b>生成</b> — 一句「输入城市名,查实时天气」→ 生成可审计的 addField 源码 + 下载工程。</figcaption>
+      </figure>
+      <figure class="demo-video" style="margin:0">
+        <img src="assets/field-shortcut-usage-demo.gif" alt="字段捷径使用:真实多维表格里城市列→天气列" loading="lazy" style="display:block;width:100%;height:auto;border-radius:var(--r);border:1px solid var(--line)"/>
+        <figcaption><b>使用</b> — 真实多维表格里「城市」列 → 自动渲染「温度/风速」列(Beijing 22.8℃、Tokyo 20.8℃…)。</figcaption>
+      </figure>
+    </div>
+
+    <h3 style="font-size:1.15rem;font-weight:650;margin:2rem 0 .2rem;color:var(--ink)">② 自动化 · 汇率换算</h3>
+    <p style="font-size:.92rem;color:var(--ink-3);margin:0 0 .9rem">在自动化流程里调汇率接口,把人民币金额换算成美元 + 汇率,供后续步骤消费。</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px">
+      <figure class="demo-video" style="margin:0">
+        <img src="assets/automation-generation-demo.gif" alt="自动化生成:一句话→AI生成addAction源码→汇率换算动作" loading="lazy" style="display:block;width:100%;height:auto;border-radius:var(--r);border:1px solid var(--line)"/>
+        <figcaption><b>生成</b> — 一句「输入人民币金额,按汇率换算成美元」→ 生成可审计的 addAction 源码(汇率换算动作)。</figcaption>
+      </figure>
+      <figure class="demo-video" style="margin:0">
+        <img src="assets/plugin-in-bitable-demo.gif" alt="自动化使用:真实多维表格自动化中心选用汇率换算自动化" loading="lazy" style="display:block;width:100%;height:auto;border-radius:var(--r);border:1px solid var(--line)"/>
+        <figcaption><b>使用</b> — 真实多维表格自动化中心 → 创建流程 → 选用「汇率换算自动化」→ 配置触发并启用。</figcaption>
+      </figure>
+    </div>
   </div>
 </section>
 
@@ -529,15 +547,7 @@ $ <b>scripts/release.sh</b> "城市天气字段捷径"
       </div>
 
     </div>
-
-    <div style="margin-top:2.5rem">
-      <h3 style="font-size:1.2rem;font-weight:650;margin:0 0 .6rem;color:var(--ink)">字段捷径生成演示</h3>
-      <p style="font-size:.95rem;color:var(--ink-2);margin:0 0 1rem">一句「输入城市名,查询实时天气,输出温度和天气状况」→ AI 自动生成完整 basekit addField 插件（含 API 调用、鉴权、输入/输出字段映射），可直接下载 zip 工程。</p>
-      <figure class="demo-video" style="margin:0">
-        <img src="assets/field-shortcut-demo.gif" alt="字段捷径一句话生成演示：输入描述→AI生成→完整源码+下载" loading="lazy" style="display:block;width:100%;height:auto;border-radius:var(--r);border:1px solid var(--line)"/>
-      </figure>
-    </div>
-
+    <p class="section-lead" style="margin-top:1.6rem;font-size:.95rem">两类插件的「生成 → 在真实多维表格中使用」录屏,见上方<a href="#plugin-in-bitable" style="color:var(--brand)">「插件在飞书多维表格中的实际使用」</a>。</p>
   </div>
 </section>
 
