@@ -1,3 +1,5 @@
+> 🌐 **中文** · [English](EXECUTE_RUNTIME.en.md)
+
 # 自托管 Execute 运行时设计（替代私有化飞书没有的 FaaS）
 
 > 状态：设计稿（2026-06-23）。对应 `design.md` **Phase 4**、`ROADMAP.md` 🔴 红区（自动化 execute / 字段公式连接器扩展）。

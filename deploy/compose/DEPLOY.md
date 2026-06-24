@@ -1,3 +1,5 @@
+> 🌐 **中文** · [English](DEPLOY.en.md)
+
 # 生产部署 — 单节点 docker compose + Caddy 自动 HTTPS
 
 目标:拿到**固定、带合法 TLS 的公网 URL**,让飞书 webview 能访问后端,从而整条链路

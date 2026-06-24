@@ -1,0 +1,137 @@
+> 🌐 [中文](ROADMAP.md) · **English**
+
+# Capability Roadmap: Feishu Plugin Ecosystem × Our Container/DSL Platform Coverage
+
+> Production method: 6-way parallel web research on the Feishu plugin ecosystem → graded against this platform's "pre-reviewed container + read-only data DSL" model → adversarial review and finalization (2026-06-22).
+> After deduplication, roughly **30 categories**: 🟢 5 / 🟡 15 / 🔴 12.
+
+## 0. Core Principle (where the boundary comes from)
+
+The **sole prerequisite** for "one-click generation + zero review" to hold: the output is a **DSL (data)**, interpreted and rendered by a **container that is reviewed only once**.
+The range that can be generated in one click ≡ **the range the container DSL can express**. The bottleneck is not natural-language generation (DeepSeek has long been good enough), it's the capability of the container interpreter.
+
+**Three red lines that must never be crossed** (crossing any one = breaching the zero-review prerequisite → must downgrade to "export a standalone plugin"):
+1. **Never execute** arbitrary JS from the user's output.
+2. **Never introduce** new outbound domains (hard-constrained by Feishu's "server domain allowlist"—proven on a real device).
+3. **Never write to** host data / never change already-reviewed permission scopes. **Writing is the true watershed of the grading, not "read-only vs. visualization."**
+   - ⚠️ Hidden trap: rendering Markdown/rich text inside a host cell, if not strongly sanitized, = JS can be injected without a single line of user JS (data-channel XSS). Bound fields must default to plain-text escaping across the board.
+
+---
+
+## 🟢 Green Zone: Covered directly by the current DSL / a micro-extension away (true one-click + zero review)
+
+| Type | Status |
+|---|---|
+| Basic charts (column/bar/line/area/pie/donut) | `chart` implemented (x=grouping / y=aggregation) + `bind.tableId`; **the real-device order dashboard has verified correct rendering with real data** |
+| Metric card / KPI | `stat` implemented (sum/avg/count/max/min); on a real device "total order amount / order count / total sales volume" are already correct |
+| Metric trend (line grouped by time) | = `chart(line, x=date field)`, no new building block |
+| Leaderboard / TopN | Add a `sort desc + limit N` modifier to the existing aggregation pipeline; micro-extension, read-only |
+| Text/heading block | `text` exists; **bound fields must be force-escaped to plain text, not parsed as HTML/Markdown** |
+
+---
+
+## 🟡 Yellow Zone: Doable by the container, but needs new building blocks / a second container (cost increasing S→L)
+
+| Type | DSL building block to add | Size | Notes |
+|---|---|---|---|
+| **Container interpreter / rendering layer (foundation)** | Two layers of "aggregation operator + renderer" (register pattern); cross-table read-only data access layer | M | **The real asset.** Adding a chart = registering a renderer, adding a statistic = registering an operator, the interpreter itself is reviewed only once. stat/chart/text already run on a real device, but the explicit abstraction is missing |
+| **Detail table (select columns + filter)** | table renderer; **truly implement the filter operator** (currently a "filter not executed" placeholder stub); row-level read-only (note batch read ≤200) | M | **A prerequisite that blocks several items: first make filter a real operator**, otherwise every "display after filtering" is an empty promise |
+| Progress chart / goal attainment (gauge) | gauge/progress renderer (current + target) | S | Logic is simple, listed yellow only because a new renderer is needed |
+| Cell Markdown / long-text preview | markdown renderer + **DOMPurify-grade strong sanitization** (forbid script/iframe/on*/javascript:) | M | **Safety red-line cell**: a hole in the sanitization layer = the zero-review prerequisite fails |
+| Pivot table / pivot chart | pivot building block (two grouping fields + one aggregation) + 2D grouping | M | Pure aggregation, no new atomic operator |
+| Advanced chart family (funnel/radar/scatter/sankey/waterfall/histogram/box plot/word cloud/heatmap) | chart.type enum extension + new operators (cumsum/quantile/bucketing/flow/word frequency) | L | Ship the pure-aggregation ones first (funnel/radar/scatter), defer the ones needing new operators |
+| Timeline | timeline renderer (date + event, read-only layout) | S | Close to the green zone |
+| Hierarchy / tree | tree renderer (parent / bidirectional link → build the tree) | M | Read-only display, controlled collapsing OK |
+| Read-only native view mirror (kanban/calendar/gallery) | read-only kanban / calendar / gallery renderer | L | **Explicitly "read-only presentation," never promise drag-and-drop write-back** (write-back drops it into the red zone) |
+| Record view extension (single-record layout / card / print) | record-layout DSL + read-only active record + browser-native print | M | **Requires a second reviewed container** (record-view blockTypeID); recommended for v2 |
+| Countdown | countdown renderer + interpreter-built-in controlled tick | S | The dynamics are provided by the interpreter, not user JS |
+| **Map view** | map renderer + the map vendor's domain fixed into the reviewed allowlist + key held by the backend + geocoding pre-processed by the backend | L | **The most dangerous cell in the yellow zone**: the only one requiring an outbound third party. Letting users fill in their own map source/key drops it into the red zone |
+| **Templated light automation** (scheduled / threshold → send a card / write one record) | automation-lite DSL + platform backend scheduler + platform bot identity | L | **Includes writing, crosses the pure-read-only boundary**: writes may only happen on the backend with platform credentials, the action set must be an enumerable allowlist; otherwise it moves to the red zone. Head-to-head with the official "App Mode" |
+
+---
+
+## 🔴 Red Zone: impossible with zero review → take the "export a standalone plugin + submit for review" escape hatch
+
+Needs "arbitrary code / third-party API·OAuth / server-side logic / write-back workflow / new native capability," outside the container's capability domain:
+
+- Automation extensions (execute server-side logic, e.g. OCR write-back)
+- AI / formula field shortcuts (batch write-back based on Coze / enterprise APIs)
+- Field extensions (custom field types), formula extensions (custom functions)
+- Data connectors (e.g. bidirectional Jira sync)
+- App bots / workflow bots / link previews / message card callbacks
+- Web apps (H5) / mini programs (Gadget)
+- Workspace widgets / cloud-document widgets (write-back + new host slot)
+- Browser extensions (web clip → write to Bitable)
+- aily agents / aPaaS low-code / AnyCross / **the official "App Mode" (head-on competitor)**
+- Large business-SaaS categories such as CRM / project / HRM / finance / BI / OA / ticketing
+
+> Escape-hatch positioning: turn these into a **paid value-added product line** of "**one-click generated scaffold code + guided submission for review**," not a zero-review promise.
+
+---
+
+## Strategic Takeaways
+
+1. **The moat = a container reviewed only once + a pure-data DSL**; sustained by strictly holding the three red lines above. Any feature that lets users fill in their own API/key/code (even in one spot) breaches the prerequisite—better to drop it into the red-zone export.
+2. **The first version strictly holds to a "read-only data dashboard"**: the green zone + low-cost yellow zone (filter/table/progress/timeline/pivot) can absorb almost all of Feishu's "dashboard + read-only visualization" demand.
+3. **The highest-priority engineering item = turn filter from a "not executed" badge into a real operator**—it blocks several items such as detail tables / filtered dashboards.
+4. **Abstract the container into two layers (aggregation operator + renderer)**: this turns the yellow-zone advanced charts from "added one by one linearly" into "add a building block, reviewed only once." This is the engineering realization of the "bypass case-by-case review" insight.
+5. **Draw a clear line between two product lines**: zero-review container output (data DSL) vs. review-required standalone plugins (code), to avoid over-promising to users.
+6. **The competitor = the official "App Mode + AI Workflow" (launched 2025-11)**: on the "build a complete business system" dimension we can't win. Differentiation = (a) one-click reuse of cross-tenant templates; (b) lighter, read-only dashboards that work the moment you embed them in any Bitable view slot; (c) treat field shortcuts / Coze as an outlet, not an opponent.
+
+---
+
+## In One Sentence
+
+**What we generate in one click is a "declarative data view," not an "arbitrary plugin."** Treat this sentence as the product boundary, and the green zone + low-cost yellow zone are the clear, winnable battlefield where the zero-review moat holds.
+
+---
+---
+
+# Generator Mainline Roadmap (field shortcuts / automation + enterprise listing)
+
+> The above is the coverage of the **container/view-component** model; this section addresses the now-mainline **field shortcut (addField) / automation (addAction) NL generator + export mode**.
+> Production method: multi-agent workflow—parallel audit of the real code (`internal/shortcut/*`, `internal/generator/*`, `publisher/`) + web research on Feishu enterprise listing + fact-checking + synthesis (2026-06-23).
+
+## A. Capability-Building Roadmap
+
+The core lever = the **"test-to-generation" loop**: the platform already renders `test/index.ts` (running testField/testAction), but the generator **never executes it**—the auto-fix loop only consumes static `Validate()` errors (`shortcut_llm.go:215`) → a plugin can "compile but return wrong data." Wiring this up is what upgrades from "compiles" to "actually returns the right value," and it's also the scoring signal for trustworthy auto-publish.
+
+Ranked by cost-effectiveness (value/effort):
+
+| Priority | Capability | Value | Size | Key points |
+|---|---|---|---|---|
+| ✅1 | **Expression conditional logic** (comparison + ternary) — **completed 2026-06-23** | High | M | Added `eq/ne/gt/gte/lt/lte` + `and/or/not` + `if/coalesce/default` + `floor/ceil/abs/min/max` as **allowlisted pure-JS functions** (`expr.go`); the parser and the `< > = ? : & \|` ban are unchanged, still no eval. Verified on a real device: `plugin-center/idcard-gender` determines gender by the parity of the 17th digit of the ID number, build:field compiles + testField truly runs (`…0011`→male / `…0028`→female); NL→DeepSeek also correctly produces `if(eq(substr(...) % 2,1),'男','女')`. Fixed the TS strict-arithmetic error on `string % 2` (helper return type marked `any`) |
+| ✅2 | **Validated template library / few-shot** (completed 2026-06-23) | High | S | `internal/generator/exemplars/{field,action}.json` embeds 6+1 validated "NL→DSL" examples (go:embed); `exemplars.go` retrieves the 2-3 most relevant by Chinese bigram + English word overlap and injects them into the system prompt. A unit test guarantees the examples always `Validate()` (no drift). On a real device: NL "English-to-Chinese" → the model reproduces the nested path `res.responseData.translatedText` from the example and compiles |
+| ✅3 | **Test→generation loop** (completed 2026-06-23) | High | L | `verify.go`'s `Verifier`: after `Validate()` passes, compile **against the real SDK** with `block-basekit-cli build:field`, feeding compile errors back into the same fix loop (which previously only consumed static Validate errors). Opt-in (`VERIFY_BUILD=1` + `BASEKIT_NODE_MODULES`), gracefully skipped without a toolchain (`errVerifyUnavailable`). Class proven captured on a real device: `substr(in.text)` (missing argument) **passes Validate but compiles with TS2554** → caught by build; the unit-test fakeVerifier proves a compile failure drives a fix round |
+| ✅4 | The **write path stack** all completed (2026-06-23): ✅action bodyJson + ✅`PUT/PATCH/DELETE` + ✅custom header + ✅multi-step chaining | High/Mid | M→S→L | `ValidMethods` adds PUT/PATCH/DELETE; `Execute.Headers`; body/bodyJson apply to POST/PUT/PATCH; unified `renderFetchInit`. **Multi-step chaining** (`steps.go`): `Steps []Step` (≤3), each step's response bound to `s_<id>`, the last step aliased `res`; placeholders `{input}` and `{priorStepId.json.path}` (array indices supported) are resolved in url/headers/body; forward references / coexisting with execute / coexisting with auth are all rejected. On a real device: an httpbin two-step chain (field·testField + action·testAction: step2 uses step1's .method, echoed back correctly); **live NL "city → lat/long → weather" generates the cross-step array reference `${s_geo?.[0]?.lat}` and passes validation**. **The technical prerequisites for connectors (structured body + REST write + chaining) are all in place.** |
+| ✅5 | Result-column type extension **all completed** (scalar + Url + MultiSelect, 2026-06-23) | Mid | M | Added **Phone/Email/Currency/Progress/Rating/Barcode** (scalar) + **Url** (`{text,link}` cell) + **MultiSelect** (`string[]`, with the new `split(text, ',')` expr function producing an array); per the SDK, fixed that the **primary column must be Text\|Number**. All `build:field`-compiled against the real SDK + testField shapes correct; **both Url's `{text,link}` and MultiSelect's `string[]` are confirmed write/read against real Bitable fields** (write code:0, read-back correct). plugin-center adds `github-homepage` (Url), `tags-split` (MultiSelect). **No significant gap remains in result-column types.** |
+| 6 | Pagination / array iteration; attachment binaries | Mid/Low | L | Currently only fetches a fixed-length `res.list.0.x`; attachment SDK has high uncertainty → defer to last |
+| ✅🎯 | **Connector / write-back of Bitable records** (Option A done + real-device write confirmed 2026-06-23) | High | L | Chose A = action calls the Feishu OpenAPI. **Key finding: multi-step chaining unlocks it directly, zero new generator code**—a 2-step pipeline (step1 fetches `tenant_access_token` → step2 `bitable/v1 .../records/batch_create`, header `Authorization: Bearer {token.tenant_access_token}`, body `{records:[{fields:{column:{input}}}]}`). **End-to-end real-device verification (user-authorized)**: testAction → actually wrote 1 record to a test Bitable, `code:0 record_id=recvnkoBDe0ohs`, read back fields `{title, body}` exactly correct, the temp table has been cleaned up. Also: DSL validation + scaffold, tsc compiles against the real SDK, the token chain returns `code:0`, and live NL can also generate it. The generator added an action-prompt connector recipe + few-shot + plugin-center `feishu-record-writeback` (credentials/Bitable are runtime inputs, never baked in). **The connector (Bitable record write-back) holds.** The client-side view track (Option B) is still not open—revisit on demand |
+| Side branch | Dashboard / custom view, Basic/OAuth2 completion | Low/Mid | L/M | Dashboard code is in the dormant `internal/dsl` track with zero real-device verification; another SDK + another review point, revisit on demand |
+
+**Suggested cadence**: ⭐1 + ⭐2 (days-scale, immediate quality lift) → ⭐3 loop → write path stack → connector strategic sprint.
+
+## B. Publishing Flow Compliant with Enterprise Listing
+
+**Conclusion (xinchuang / government-enterprise): go with "export mode + disable review exemption + manual admin review."**
+
+| # | Stage | Who | Compliance gate |
+|---|---|---|---|
+| 0 | Intake: one sentence → DSL, `dsl.json` stores NL + DSL | Business side / platform | Starting point of the audit trail (provenance) |
+| 1 | Compile-time hard gate: expr allowlist no-eval, `url host ⊆ domains`, result ≤20, minimal scope | Platform | Machine pre-screen of source + outbound allowlist + least-privilege permissions |
+| 2 | **Source-code security human review**: line-by-line reading of `index.ts`/`register.ts` + SCA/SBOM | Security & compliance (run by the enterprise itself) | **The core human review**—Feishu self-built apps do not go through an official source review, so government-enterprise must run this gate |
+| 3 | Create the app + register the extension to obtain APP_ID/blockTypeID (publisher RPA) | Platform / admin | Carrier ready + minimal scope granted |
+| 4 | Push the bundle with the official `block-basekit-cli upload` | Platform / admin | Runtime outbound: runtime enforces `addDomainList` + `context.fetch` |
+| 5 | Create a version + apply to publish: **converge the availability range to a small group / test cohort first** | Platform / admin | Version and availability range + any change forces a re-review (falsifiable hook) |
+| 6 | **Admin manual approval to release** (or `PATCH app_versions status=1`) | Admin + compliance | The only mandatory approval gate—**explicitly turn off review exemption**, don't let versions go live silently |
+| 7 | Go live + real-device joint debugging + member-behavior audit acceptance, then gradually widen the availability range | Admin / compliance | Audit-trail closure + data-security acceptance |
+
+**Container vs. export** (reviewed once vs. each reviewed):
+- **Export mode** (mainline): each plugin is independently auditable TS, uploaded one by one and reviewed one by one, every outbound domain / scope / version forced through review = the falsifiable hook that government-enterprise wants.
+- **Container mode**: the container is reviewed only once, the output is DSL data. But the backend is a **single shared `PLATFORM_API_TOKEN` embedded in the frontend (extractable, read/write/delete all in one)** → **only for purely internal use, low-sensitivity, single-tenant**, never for sensitive / external use.
+
+**Two gaps that must be filled** (otherwise it doesn't count as enterprise-grade compliance):
+1. **Publish audit ledger**: the publisher currently only takes screenshots for calibration, with no tamper-proof log of "who / when / which tenant / which version / source hash," and no **consistency comparison (attestation) between the uploaded bundle and the reviewed source**.
+2. **Shared-token upgrade**: backend single all-powerful bearer → user-level authentication (JSAPI ticket) or splitting read/write permissions.
+
+> ⚠️ **Must be verified firsthand in the target console** (low-confidence fact-check): ① Feishu's official intro page currently confirms the GA extension types as **record view / data-table view / automation action + field shortcut (server capability)**; "connector / dashboard" as official plugin types are not confirmed on the official page (or belong to the roadmap / an older version). ② The default headcount for review exemption and the OAuth2 behavior of private deployments are often wrong online—defer to the private-deployment console.
