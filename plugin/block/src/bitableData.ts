@@ -13,6 +13,24 @@ export interface HostData {
   records: Record<string, unknown>[];
 }
 
+// currentTableId 取插件被打开时所在的数据表 id(优先选区,其次活动表)。
+// 用于「按当前表匹配应用定义」——同一容器渲染器支持多个插件:每个插件 bind 一张表,
+// 打开哪张表就渲染绑定它的那个插件。解析失败返回 undefined(调用方回退 listApps()[0])。
+export async function currentTableId(): Promise<string | undefined> {
+  const base: any = bitable.base;
+  try {
+    const sel: any = await base.getSelection();
+    if (sel && sel.tableId) return sel.tableId;
+  } catch { /* ignore */ }
+  try {
+    if (typeof base.getActiveTable === 'function') {
+      const t: any = await base.getActiveTable();
+      if (t && t.id) return t.id;
+    }
+  } catch { /* ignore */ }
+  return undefined;
+}
+
 // readHostData 解析宿主表(优先 bind.tableId,否则当前选区/活动表),读取可见记录。
 export async function readHostData(def: AppDefinition): Promise<HostData> {
   const base: any = bitable.base;

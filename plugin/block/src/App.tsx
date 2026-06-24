@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAsync } from 'react-async-hook';
 import { getApp, listApps, execute } from './api';
-import { readHostData, aggregate, groupAggregate } from './bitableData';
+import { readHostData, currentTableId, aggregate, groupAggregate } from './bitableData';
 import { resolveColumns, pivot, sortLimit } from './ops';
 import { toLabel, toNumber } from './cellValue';
 import { applyFilter } from './filter';
@@ -10,7 +10,15 @@ import type { AppDefinition, Component } from './dsl';
 // 加载:从平台 API 取应用定义(?app=<id> 优先,否则取列表第一个),再用 SDK 读宿主真实数据。
 async function load(): Promise<{ def: AppDefinition; records: Record<string, unknown>[] }> {
   const id = new URLSearchParams(window.location.search).get('app');
-  const def = id ? await getApp(id) : (await listApps())[0];
+  let def: AppDefinition | undefined;
+  if (id) {
+    def = await getApp(id);
+  } else {
+    // 多插件共存:优先渲染「绑定了当前数据表」的那个应用;否则回退到第一个。
+    const apps = await listApps();
+    const tid = await currentTableId().catch(() => undefined);
+    def = (tid && apps.find((a) => a.bind && a.bind.tableId === tid)) || apps[0];
+  }
   if (!def) throw new Error('平台上没有可渲染的应用定义(先在平台生成一个)');
   const { records } = await readHostData(def);
   return { def, records };
