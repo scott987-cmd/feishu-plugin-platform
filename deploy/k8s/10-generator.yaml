@@ -39,6 +39,10 @@ spec:
               valueFrom: { configMapKeyRef: { name: platform-config, key: LLM_PROVIDER } }
             - name: MODEL
               valueFrom: { configMapKeyRef: { name: platform-config, key: MODEL } }
+            - name: AI_ENABLED
+              valueFrom: { configMapKeyRef: { name: platform-config, key: AI_ENABLED } }
+            - name: DEEPSEEK_BASE_URL
+              valueFrom: { configMapKeyRef: { name: platform-config, key: DEEPSEEK_BASE_URL } }
             - name: DEEPSEEK_API_KEY
               valueFrom: { secretKeyRef: { name: platform-secrets, key: DEEPSEEK_API_KEY } }
             # Require a bearer on all generator endpoints (the api sends it).

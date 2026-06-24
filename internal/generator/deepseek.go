@@ -127,6 +127,9 @@ func (h httpDeepSeek) create(ctx context.Context, req oaRequest) (oaResponse, er
 // generateWithDeepSeek is the seam used by generateWithLLM. Returns ok=false when
 // DEEPSEEK_API_KEY is absent or the call fails (→ fall back to keyword router).
 func generateWithDeepSeek(prompt string) (dsl.AppDefinition, bool, error) {
+	if !AIEnabled() { // AI hard-disabled: never egress the prompt
+		return dsl.AppDefinition{}, false, nil
+	}
 	key := os.Getenv("DEEPSEEK_API_KEY")
 	if key == "" {
 		return dsl.AppDefinition{}, false, nil

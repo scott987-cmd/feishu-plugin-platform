@@ -118,3 +118,14 @@ opdev upload ./dist
 - 镜像用可变 tag + `IfNotPresent`:重推同名 tag 不会重新拉取。生产请按 digest 固定(`@sha256:...`)或每次 bump 版本;`make images` 的 `REGISTRY` 需与 `deploy/k8s/{10,20}-*.yaml` 的 image 前缀手动对齐(无 kustomize 模板)。
 - `docker compose` 仅供本地 dev(无 healthcheck 门禁,默认 STORE=memory、CORS=*);生产走 k8s。
 - 前端构建需联网(npm),不在 `go test ./...` 覆盖内;建议 CI 加 `npm ci && npm run typecheck`。
+
+## 9. AI 数据出域(合规)
+
+平台只在**自然语言生成**时调用 LLM,出域面很小,且可关、可改向、可自托管:
+
+- **出域什么** —— 仅你输入的**自然语言提示词** + 平台内置的静态 few-shot 示例 + 工具 schema。**不发送**多维表格行数据、用户凭证、API key(这些走自托管 `execute-runner`,留在你的集群内)。提示词内容由作者输入决定——**请勿在提示词里粘贴密钥 / 个人敏感信息**(它是唯一的出域通道)。
+- **出域到哪** —— 默认 DeepSeek 公网 `api.deepseek.com`(`LLM_PROVIDER=deepseek`)。用 **`DEEPSEEK_BASE_URL`** 把端点钉到**自托管 / 境内的 OpenAI 兼容模型**,提示词即不出你的边界 / 不出境;`MODEL` 选具体模型。
+  > DeepSeek 公网默认无零留存 DPA;受监管 / 不出境租户请改向自托管模型,或选有 DPA / 零留存承诺的提供方。
+- **怎么彻底关** —— **`AI_ENABLED=false`**:任何 NL 都不再调用 LLM(只用模板 + 确定性关键词路由),提示词**永不出域**。
+- **启动透明** —— generator 启动日志会明确打印当前是「AI ON → 出域到 \<endpoint\>」「DISABLED」还是「无 key 退化关键词路由」,合规审计直接看这一行。
+- **默认** —— `AI_ENABLED=true`;未配 `DEEPSEEK_API_KEY` 时 NL 自动退化为关键词路由(等效不出域)。

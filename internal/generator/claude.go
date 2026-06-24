@@ -121,6 +121,9 @@ func (h httpMessages) create(ctx context.Context, req anthropicRequest) (anthrop
 // Returns ok=false when the key is absent or the call fails — so the caller falls
 // back to the deterministic keyword router rather than erroring the whole request.
 func generateWithAnthropic(prompt string) (dsl.AppDefinition, bool, error) {
+	if !AIEnabled() { // AI hard-disabled: never egress the prompt
+		return dsl.AppDefinition{}, false, nil
+	}
 	key := os.Getenv("ANTHROPIC_API_KEY")
 	if key == "" {
 		return dsl.AppDefinition{}, false, nil

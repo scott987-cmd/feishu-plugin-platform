@@ -91,7 +91,7 @@ func actionSchema() map[string]any {
 				},
 			},
 			"inputs": arr(input),
-			"result":  arr(output),
+			"result": arr(output),
 			"execute": map[string]any{
 				"type":     "object",
 				"required": []string{"url", "method"},
@@ -121,6 +121,9 @@ func actionSchema() map[string]any {
 
 // GenerateAction turns a natural-language request into a validated Action.
 func GenerateAction(prompt string) (shortcut.Action, bool, error) {
+	if !AIEnabled() { // AI hard-disabled: never egress the prompt
+		return shortcut.Action{}, false, nil
+	}
 	key := os.Getenv("DEEPSEEK_API_KEY")
 	if key == "" {
 		return shortcut.Action{}, false, nil

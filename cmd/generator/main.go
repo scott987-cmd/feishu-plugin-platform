@@ -8,12 +8,28 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 
 	"github.com/dushibing/feishu-plugin-platform/internal/generator"
 	"github.com/dushibing/feishu-plugin-platform/internal/httpx"
 	"github.com/dushibing/feishu-plugin-platform/internal/shortcut"
 )
+
+// egressHost returns the host NL prompts are sent to for the active provider, for
+// the boot-time data-egress transparency log.
+func egressHost(provider string) string {
+	if provider == "anthropic" {
+		return "api.anthropic.com"
+	}
+	if b := os.Getenv("DEEPSEEK_BASE_URL"); b != "" {
+		if p, err := url.Parse(b); err == nil && p.Host != "" {
+			return p.Host
+		}
+		return b
+	}
+	return "api.deepseek.com"
+}
 
 func main() {
 	port := getenv("PORT", "8090")
@@ -32,10 +48,15 @@ func main() {
 	mux.HandleFunc("POST /action/zip", handleActionZip)
 
 	provider := getenv("LLM_PROVIDER", "deepseek")
-	if !aiConfigured(provider) {
-		// Template mode still works; the NL track silently degrades to the
-		// deterministic keyword router — surface that so it isn't a silent failure.
+	// Data-egress transparency: make it explicit at boot whether (and where) any
+	// natural-language prompt leaves this server. Compliance teams read this line.
+	switch {
+	case !generator.AIEnabled():
+		log.Printf("AI generation DISABLED (AI_ENABLED=false) — NL prompts NEVER leave this server; only templates + the deterministic keyword router are used")
+	case !aiConfigured(provider):
 		log.Printf("WARNING: no API key for LLM_PROVIDER=%s — AI (nl) generation will fall back to the keyword router", provider)
+	default:
+		log.Printf("AI generation ON — NL prompts EGRESS to provider=%s endpoint=%s. Only the typed prompt + static exemplars are sent (NOT Bitable row data or credentials). Disable with AI_ENABLED=false; pin a region/self-hosted model with DEEPSEEK_BASE_URL.", provider, egressHost(provider))
 	}
 
 	// The generator holds the LLM API key and makes paid calls; it must not be an
@@ -48,8 +69,8 @@ func main() {
 	}
 
 	srv := httpx.NewServer(":"+port, authMiddleware(token, mux))
-	log.Printf("generator listening on :%s (provider=%s, model=%s, aiConfigured=%t, auth=%t)",
-		port, provider, getenv("MODEL", "deepseek-chat"), aiConfigured(provider), token != "")
+	log.Printf("generator listening on :%s (provider=%s, model=%s, aiConfigured=%t, aiEnabled=%t, auth=%t)",
+		port, provider, getenv("MODEL", "deepseek-chat"), aiConfigured(provider), generator.AIEnabled(), token != "")
 	if err := httpx.Run(srv); err != nil {
 		log.Fatal(err)
 	}

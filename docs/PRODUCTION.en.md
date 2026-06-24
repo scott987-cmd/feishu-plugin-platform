@@ -118,3 +118,14 @@ Deployment:
 - Images use a mutable tag + `IfNotPresent`: re-pushing the same tag name will not re-pull. For production, pin by digest (`@sha256:...`) or bump the version each time; the `REGISTRY` of `make images` must be manually aligned with the image prefix in `deploy/k8s/{10,20}-*.yaml` (no kustomize templating).
 - `docker compose` is for local dev only (no healthcheck gating; defaults to STORE=memory, CORS=*); production runs on k8s.
 - The frontend build requires network access (npm) and is not covered by `go test ./...`; CI should add `npm ci && npm run typecheck`.
+
+## 9. AI Data Egress (Compliance)
+
+The platform calls an LLM only during **natural-language generation**. The egress surface is small, and it can be turned off, redirected, or self-hosted:
+
+- **What egresses** — only the **natural-language prompt** you type + the platform's built-in static few-shot examples + the tool schema. It does **NOT** send Bitable row data, user credentials, or API keys (those go through the self-hosted `execute-runner` and stay inside your cluster). What a prompt contains is up to the author — **do not paste secrets / personal sensitive data into prompts** (the prompt is the only egress channel).
+- **Where it egresses** — by default DeepSeek's public `api.deepseek.com` (`LLM_PROVIDER=deepseek`). Use **`DEEPSEEK_BASE_URL`** to pin the endpoint to a **self-hosted / in-region OpenAI-compatible model**, so prompts never leave your boundary / region; `MODEL` picks the specific model.
+  > Public DeepSeek has no zero-retention DPA by default; regulated / data-residency tenants should redirect to a self-hosted model or choose a provider with a DPA / zero-retention commitment.
+- **How to fully disable** — **`AI_ENABLED=false`**: no NL ever calls the LLM (templates + the deterministic keyword router only); prompts **never egress**.
+- **Boot-time transparency** — the generator's startup log explicitly prints whether it is "AI ON → egress to \<endpoint\>", "DISABLED", or "no key → keyword-router fallback" — compliance audits can read this one line.
+- **Defaults** — `AI_ENABLED=true`; when `DEEPSEEK_API_KEY` is unset, NL automatically degrades to the keyword router (equivalent to no egress).

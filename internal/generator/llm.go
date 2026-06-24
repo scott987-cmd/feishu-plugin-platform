@@ -2,9 +2,16 @@ package generator
 
 import (
 	"os"
+	"strings"
 
 	"github.com/dushibing/feishu-plugin-platform/internal/dsl"
 )
+
+// AIEnabled reports whether the AI (NL→LLM) track is permitted. Set AI_ENABLED=false
+// to HARD-disable every LLM call — no natural-language prompt ever egresses to the
+// provider, even with an API key present — for compliance-strict tenants. Generation
+// then uses only templates + the deterministic keyword router. Default: enabled.
+func AIEnabled() bool { return !strings.EqualFold(os.Getenv("AI_ENABLED"), "false") }
 
 // genSystemPrompt is shared by every LLM provider so the instructions (and the
 // "must call the tool / stay on-schema" contract) never drift between them.

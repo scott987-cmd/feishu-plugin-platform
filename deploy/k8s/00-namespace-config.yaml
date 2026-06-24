@@ -22,6 +22,12 @@ data:
   # LLM_PROVIDER=anthropic + the ANTHROPIC_API_KEY secret + MODEL=claude-*.
   LLM_PROVIDER: "deepseek"
   MODEL: "deepseek-chat"
+  # Data-egress control. AI_ENABLED=false hard-disables all NL→LLM calls — no
+  # prompt ever leaves the cluster (template + keyword router only). Compliance kill-switch.
+  AI_ENABLED: "true"
+  # Pin the LLM endpoint to a self-hosted / in-region OpenAI-compatible model for
+  # regulated tenants (empty = DeepSeek public api.deepseek.com). Keeps prompts in-region.
+  DEEPSEEK_BASE_URL: ""
   WEB_DIR: "/web"
   # Do not serve the dev mock renderer in production (reduces attack surface).
   SERVE_WEB: "false"

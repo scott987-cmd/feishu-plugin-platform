@@ -20,9 +20,9 @@ import (
 // emitted DSL is then compiled to an auditable basekit TS project elsewhere.
 
 const (
-	emitShortcutTool      = "emit_field_shortcut"
-	shortcutMaxRepairs    = 2
-	shortcutSystemPrompt  = "You generate a Feishu Bitable FIELD SHORTCUT definition (basekit), as JSON. " +
+	emitShortcutTool     = "emit_field_shortcut"
+	shortcutMaxRepairs   = 2
+	shortcutSystemPrompt = "You generate a Feishu Bitable FIELD SHORTCUT definition (basekit), as JSON. " +
 		"You MUST call the " + emitShortcutTool + " tool exactly once, using only fields and enum values allowed by its input schema. " +
 		"A field shortcut: takes input field(s) the user picks (formItems, normally component=FieldSelect with supportType), " +
 		"calls ONE external HTTP API (execute.url + method), and writes back one or more output columns (result.properties). " +
@@ -95,9 +95,9 @@ func fieldShortcutSchema() map[string]any {
 		"type":     "object",
 		"required": []string{"id", "title", "formItems", "result"},
 		"properties": map[string]any{
-			"id":        d(str, "lowercase ascii slug, e.g. exchange-rate"),
-			"title":     i18nObj,
-			"domains":   d(arr(str), "every external host the request hits, e.g. api.exchangerate-api.com"),
+			"id":      d(str, "lowercase ascii slug, e.g. exchange-rate"),
+			"title":   i18nObj,
+			"domains": d(arr(str), "every external host the request hits, e.g. api.exchangerate-api.com"),
 			"auth": map[string]any{
 				"type":        "object",
 				"description": "optional; include ONLY if the API needs a key/token (omit for open APIs)",
@@ -175,6 +175,9 @@ func stepSchema() map[string]any {
 // or the call fails (caller can decide how to handle — there is no deterministic
 // fallback for arbitrary shortcuts).
 func GenerateShortcut(prompt string) (shortcut.FieldShortcut, bool, error) {
+	if !AIEnabled() { // AI hard-disabled: never egress the prompt
+		return shortcut.FieldShortcut{}, false, nil
+	}
 	key := os.Getenv("DEEPSEEK_API_KEY")
 	if key == "" {
 		return shortcut.FieldShortcut{}, false, nil
