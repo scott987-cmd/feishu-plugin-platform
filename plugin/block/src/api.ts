@@ -75,6 +75,14 @@ export function listApps(): Promise<AppDefinition[]> {
   return getJSON<AppDefinition[]>("/api/apps").then((apps) => apps ?? []);
 }
 
+/**
+ * 只列出绑定到指定数据表的应用定义。对应 GET /api/apps?tableId=<id>(服务端过滤)。
+ * 容器渲染时用它,避免把全组织目录拉到客户端(带宽 + 机密)。
+ */
+export function listAppsByTable(tableId: string): Promise<AppDefinition[]> {
+  return getJSON<AppDefinition[]>(`/api/apps?tableId=${encodeURIComponent(tableId)}`).then((apps) => apps ?? []);
+}
+
 /** 按 id 读取单个应用定义。对应 GET /api/apps/{id}。 */
 export function getApp(id: string): Promise<AppDefinition> {
   if (!id) return Promise.reject(new Error("getApp: id 不能为空"));

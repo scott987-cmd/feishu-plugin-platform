@@ -26,7 +26,22 @@ import (
 type BitableStore struct {
 	api bitableAPI
 	mu  sync.Mutex // serializes find+write so Put/Delete are atomic per process
+
+	// Read-through cache for the hot List path. Definitions change rarely (only on
+	// publish), but the widget reads them on EVERY open by EVERY user — without a
+	// cache that is a full Bitable table scan per open, which exhausts the Feishu
+	// per-app QPS at scale. The cache is invalidated on every local Put/Delete;
+	// cross-replica writes become visible within cacheTTL.
+	cacheMu  sync.Mutex
+	cache    []dsl.AppDefinition
+	cacheAt  time.Time
+	cacheOK  bool
+	cacheTTL time.Duration
 }
+
+// listCacheTTL bounds staleness of the List read cache (cross-replica writes show
+// up within this window; same-replica writes are reflected immediately via invalidate).
+const listCacheTTL = 15 * time.Second
 
 // bitableAPI is the low-level record CRUD seam. Tests substitute a fake; the real
 // implementation (feishuBitable) talks to the Bitable OpenAPI.
@@ -45,7 +60,7 @@ type rawRecord struct {
 
 // NewBitableStore wires a BitableStore to a real Feishu Bitable table.
 func NewBitableStore(appID, appSecret, appToken, tableID string) *BitableStore {
-	return &BitableStore{api: &feishuBitable{
+	return &BitableStore{cacheTTL: listCacheTTL, api: &feishuBitable{
 		appID:     appID,
 		appSecret: appSecret,
 		appToken:  appToken,
@@ -67,8 +82,20 @@ func (s *BitableStore) Get(ctx context.Context, id string) (dsl.AppDefinition, b
 	return def, ok, err
 }
 
-// List returns every parseable definition.
+// List returns every parseable definition, served from a short-TTL read cache to
+// avoid a full Bitable scan on every call (the widget hits this on every open).
 func (s *BitableStore) List(ctx context.Context) ([]dsl.AppDefinition, error) {
+	s.cacheMu.Lock()
+	if s.cacheOK && s.cacheTTL > 0 && time.Since(s.cacheAt) < s.cacheTTL {
+		// Return a copy: the cache slice is private, so a caller mutating the result
+		// (sort/dedup/in-place edit) can never corrupt it for other readers — matching
+		// Memory.List's fresh-slice contract.
+		defs := append([]dsl.AppDefinition(nil), s.cache...)
+		s.cacheMu.Unlock()
+		return defs, nil
+	}
+	s.cacheMu.Unlock()
+
 	ctx, cancel := derive(ctx)
 	defer cancel()
 	recs, err := s.api.list(ctx)
@@ -84,7 +111,22 @@ func (s *BitableStore) List(ctx context.Context) ([]dsl.AppDefinition, error) {
 		}
 		out = append(out, d)
 	}
+	if s.cacheTTL > 0 {
+		s.cacheMu.Lock()
+		// Store a private copy so `out` (returned to the caller) and the cache never
+		// share a backing array.
+		s.cache = append([]dsl.AppDefinition(nil), out...)
+		s.cacheAt, s.cacheOK = time.Now(), true
+		s.cacheMu.Unlock()
+	}
 	return out, nil
+}
+
+// invalidate drops the List cache after a local write so the next read is fresh.
+func (s *BitableStore) invalidate() {
+	s.cacheMu.Lock()
+	s.cacheOK = false
+	s.cacheMu.Unlock()
 }
 
 // Put creates or updates the record for def.ID with a server-authoritative
@@ -118,6 +160,7 @@ func (s *BitableStore) Put(ctx context.Context, def dsl.AppDefinition) (dsl.AppD
 			return dsl.AppDefinition{}, err
 		}
 	}
+	s.invalidate()
 	return def, nil
 }
 
@@ -134,7 +177,11 @@ func (s *BitableStore) Delete(ctx context.Context, id string) error {
 	if !ok {
 		return nil
 	}
-	return s.api.delete(ctx, recordID)
+	if err := s.api.delete(ctx, recordID); err != nil {
+		return err
+	}
+	s.invalidate()
+	return nil
 }
 
 // Ping is a cheap readiness check: confirm Feishu auth + table access without

@@ -4,19 +4,22 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/dushibing/feishu-plugin-platform/internal/dsl"
 )
 
 // fakeBitable is an in-memory bitableAPI for testing BitableStore logic.
 type fakeBitable struct {
-	recs map[string]map[string]any
-	seq  int
+	recs  map[string]map[string]any
+	seq   int
+	listN int // number of list() calls — lets cache tests assert hits/misses
 }
 
 func newFakeBitable() *fakeBitable { return &fakeBitable{recs: map[string]map[string]any{}} }
 
 func (f *fakeBitable) list(_ context.Context) ([]rawRecord, error) {
+	f.listN++
 	out := make([]rawRecord, 0, len(f.recs))
 	for id, fields := range f.recs {
 		out = append(out, rawRecord{recordID: id, fields: fields})
@@ -137,5 +140,78 @@ func TestDefFieldsRoundTrip(t *testing.T) {
 	}
 	if back.ID != def.ID || back.Version != 3 || back.Actions[0].Trigger != "button" {
 		t.Errorf("round-trip mismatch: %+v", back)
+	}
+}
+
+// TestBitableListCache verifies List is served from the TTL cache (so the widget's
+// per-open reads don't full-scan Bitable each time) and that writes invalidate it.
+func TestBitableListCache(t *testing.T) {
+	ctx := context.Background()
+	fake := newFakeBitable()
+	st := &BitableStore{api: fake, cacheTTL: time.Minute}
+
+	if _, err := st.List(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.List(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if fake.listN != 1 {
+		t.Errorf("two List calls hit the API %d times, want 1 (second should be cached)", fake.listN)
+	}
+	// Mutating a returned (cached) result must NOT corrupt the cache for other readers.
+	if _, err := st.Put(ctx, sampleDef("app-m", "orig")); err != nil {
+		t.Fatal(err)
+	}
+	first, _ := st.List(ctx) // refreshes cache (Put invalidated)
+	for i := range first {
+		first[i].Name = "MUTATED"
+	}
+	second, _ := st.List(ctx) // cache hit
+	for _, d := range second {
+		if d.Name == "MUTATED" {
+			t.Fatalf("mutating a List result corrupted the cache (id=%s)", d.ID)
+		}
+	}
+
+	// A write must invalidate the cache so the next read is fresh.
+	before := fake.listN
+	if _, err := st.Put(ctx, sampleDef("app-z", "Z")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.List(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if fake.listN <= before {
+		t.Errorf("List after Put served stale cache (listN=%d, before=%d); Put must invalidate", fake.listN, before)
+	}
+	// Delete must also invalidate.
+	before = fake.listN
+	if err := st.Delete(ctx, "app-z"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.List(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if fake.listN <= before {
+		t.Errorf("List after Delete served stale cache; Delete must invalidate")
+	}
+}
+
+func TestFilterByTable(t *testing.T) {
+	defs := []dsl.AppDefinition{
+		{ID: "a", Bind: dsl.Bind{TableID: "tbl1"}},
+		{ID: "b", Bind: dsl.Bind{TableID: "tbl2"}},
+		{ID: "c", Bind: dsl.Bind{TableID: "tbl1"}},
+	}
+	got := FilterByTable(defs, "tbl1")
+	if len(got) != 2 || got[0].ID != "a" || got[1].ID != "c" {
+		t.Errorf("FilterByTable(tbl1) = %+v, want a,c", got)
+	}
+	if len(FilterByTable(defs, "")) != 3 {
+		t.Error("empty tableID should return all")
+	}
+	if len(FilterByTable(defs, "nope")) != 0 {
+		t.Error("unknown tableID should return none")
 	}
 }

@@ -162,6 +162,12 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	// Scope to a single host table when ?tableId= is given (the container widget
+	// passes its current table) — return ONLY that table's apps, not the whole
+	// org catalog. Avoids shipping every plugin definition to every client.
+	if tid := r.URL.Query().Get("tableId"); tid != "" {
+		defs = store.FilterByTable(defs, tid)
+	}
 	writeJSON(w, http.StatusOK, defs)
 }
 

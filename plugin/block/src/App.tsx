@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAsync } from 'react-async-hook';
-import { getApp, listApps, execute } from './api';
+import { getApp, listAppsByTable, execute } from './api';
 import { readHostData, currentTableId, aggregate, groupAggregate } from './bitableData';
 import { resolveColumns, pivot, sortLimit } from './ops';
 import { toLabel, toNumber } from './cellValue';
@@ -10,17 +10,20 @@ import type { AppDefinition, Component } from './dsl';
 // 加载:从平台 API 取应用定义(?app=<id> 优先,否则取列表第一个),再用 SDK 读宿主真实数据。
 async function load(): Promise<{ defs: AppDefinition[]; records: Record<string, unknown>[] }> {
   const id = new URLSearchParams(window.location.search).get('app');
-  const apps = await listApps();
   let defs: AppDefinition[];
   if (id) {
     const d = await getApp(id);
     defs = d ? [d] : [];
   } else {
-    // 多插件共存:渲染「绑定了当前数据表」的全部应用(按上架顺序堆叠);
-    // 都不匹配时回退到第一个,保证空表场景仍有东西可看。
+    // 多插件共存:渲染「绑定了当前数据表」的全部应用(按上架顺序堆叠)。服务端按表过滤
+    // (GET /api/apps?tableId=),只拉本表的应用,不再下载全组织目录。
+    // 刻意不回退到 listApps()[0]:那会(a)重新下载全量目录、(b)在本表里渲染另一张表的
+    // 插件——两者在企业场景都是错的。本表没绑定插件就显示空态,语义正确且不泄露目录。
     const tid = await currentTableId().catch(() => undefined);
-    const matched = tid ? apps.filter((a) => a.bind && a.bind.tableId === tid) : [];
-    defs = matched.length ? matched : apps.slice(0, 1);
+    defs = tid ? await listAppsByTable(tid) : [];
+    if (!defs.length) {
+      throw new Error('当前数据表还没有绑定插件(在平台为这张表生成/上架一个即可)');
+    }
   }
   if (!defs.length) throw new Error('平台上没有可渲染的应用定义(先在平台生成一个)');
   // 同一宿主表:记录读一次,共享给该表上的所有插件。

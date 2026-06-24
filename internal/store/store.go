@@ -24,6 +24,23 @@ type Store interface {
 	Delete(ctx context.Context, id string) error
 }
 
+// FilterByTable returns only the definitions bound to tableID (empty tableID →
+// all). Used to serve GET /api/apps?tableId= so a client (the in-Bitable widget)
+// receives ONLY the apps for its current table instead of the whole org catalog —
+// both a bandwidth fix and a confidentiality fix (no enumerating every plugin).
+func FilterByTable(defs []dsl.AppDefinition, tableID string) []dsl.AppDefinition {
+	if tableID == "" {
+		return defs
+	}
+	out := make([]dsl.AppDefinition, 0, len(defs))
+	for _, d := range defs {
+		if d.Bind.TableID == tableID {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
 // Pinger is an optional cheap health check (no full scan) for readiness probes.
 // Stores that talk to a remote backend should implement it.
 type Pinger interface {

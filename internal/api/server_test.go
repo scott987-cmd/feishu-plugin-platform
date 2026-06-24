@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -168,6 +169,49 @@ func TestTokenCapabilitySplit(t *testing.T) {
 	for _, p := range []string{"//api/apps", "/./api/apps"} {
 		if c := do(t, "POST", ts.URL+p, "readonly", validDefJSON()); c == 200 || c == 204 {
 			t.Errorf("read token POST %s = %d, want auth-checked (not a successful mutation)", p, c)
+		}
+	}
+}
+
+// TestListScopedByTable verifies GET /api/apps?tableId= returns only the apps
+// bound to that table (B2: no full-catalog download / read-leak to the widget).
+func TestListScopedByTable(t *testing.T) {
+	st := store.NewMemory()
+	ctx := context.Background()
+	mk := func(id, tbl string) dsl.AppDefinition {
+		return dsl.AppDefinition{
+			ID: id, Name: id, Type: "view_extension", Bind: dsl.Bind{TableID: tbl},
+			UI: dsl.UI{Layout: "dashboard", Components: []dsl.Component{{Type: "stat", Title: "t"}}},
+		}
+	}
+	for _, d := range []dsl.AppDefinition{mk("a", "tbl1"), mk("b", "tbl2"), mk("c", "tbl1")} {
+		if _, err := st.Put(ctx, d); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ts := httptest.NewServer(New(st, Config{}).Routes())
+	defer ts.Close()
+
+	get := func(path string) []dsl.AppDefinition {
+		resp, err := http.Get(ts.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var out []dsl.AppDefinition
+		_ = json.NewDecoder(resp.Body).Decode(&out)
+		return out
+	}
+	if all := get("/api/apps"); len(all) != 3 {
+		t.Errorf("GET /api/apps = %d apps, want 3", len(all))
+	}
+	scoped := get("/api/apps?tableId=tbl1")
+	if len(scoped) != 2 {
+		t.Fatalf("GET /api/apps?tableId=tbl1 = %d apps, want 2", len(scoped))
+	}
+	for _, d := range scoped {
+		if d.Bind.TableID != "tbl1" {
+			t.Errorf("scoped result leaked app bound to %q", d.Bind.TableID)
 		}
 	}
 }
