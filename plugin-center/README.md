@@ -1,7 +1,7 @@
-# 私有化插件中心 · Private Plugin Center
+# 示例插件中心 · Example Plugin Center
 
-A catalog of **AI-generated, real-machine-verified** Feishu Bitable plugins, ready to drop into a
-privately-deployed Feishu environment. Every plugin here was produced from a one-sentence natural-language
+A catalog of **AI-generated, real-machine-verified** Feishu Bitable plugins, ready to drop into an
+enterprise Feishu environment. Every plugin here was produced from a one-sentence natural-language
 prompt by this repo's generator (`cmd/shortcutgen -nl …`), then verified end-to-end against a **real external
 API** via the basekit `testField` / `testAction` harness — not just compiled.
 

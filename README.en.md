@@ -9,7 +9,7 @@
 [![Tests](https://img.shields.io/badge/go%20test-passing-brightgreen)](#quick-start) <!-- badge placeholder -->
 [![basekit](https://img.shields.io/badge/basekit-server--api%201.0.6-0F6E56)](#what-it-generates) <!-- badge placeholder -->
 
-A natural-language → basekit plugin generator for organizations using Feishu (**standard SaaS or privately-deployed — both supported**): they have Bitable and the plugin capability, but **no plugin marketplace and no in-house dev team**. You type one sentence; the platform emits a standard, human-readable basekit TypeScript project that goes through Feishu's normal upload + review chain.
+A natural-language → basekit plugin generator for enterprises using Feishu (信创 / 政企 / state-owned, etc.): they have Bitable and the plugin capability, but **no plugin marketplace and no in-house dev team**. You type one sentence; the platform emits a standard, human-readable basekit TypeScript project that goes through Feishu's normal upload + review chain.
 
 It also ships the **delivery** side enterprises care about: a **self-hosted execute runtime** (connectors / field shortcuts call external APIs through your own server — no external function hosting) and **one-click release + deploy** (`scripts/release.sh`). See **[`OPERATIONS.md`](docs/OPERATIONS.en.md)**.
 
@@ -33,11 +33,11 @@ A real, unedited screen recording — type one sentence, the model generates **a
 
 ## The problem it solves
 
-A private Feishu deployment ships with the basekit plugin capability but, by design, **no public marketplace** — there is nowhere to "install" a community field shortcut or automation. Building one yourself means hiring someone who knows the basekit SDK. Most of these orgs (信创 / 政企 / state-owned enterprises) have neither.
+An enterprise Feishu tenant ships with the basekit plugin capability but **no public marketplace** — there is nowhere to "install" a community field shortcut or automation. Building one yourself means hiring someone who knows the basekit SDK. Most of these orgs (信创 / 政企 / state-owned enterprises) have neither.
 
 This platform closes that gap. A non-engineer states a need in plain language; the platform produces a **real basekit project whose source a security/compliance team can read line by line before it is ever uploaded**. The generated TypeScript is the deliverable — not an opaque binary, not a hosted runtime you have to trust. For 信创 / 政企 customers, "audit it yourself, then submit it for review" is the selling point, not a caveat.
 
-On **standard (public-cloud) Feishu** the runtime is Feishu's own basekit FaaS, so the generator's job is simply to emit a correct, standard, auditable project. **Privately-deployed Feishu has no FaaS** — so connector / field-shortcut execution runs on a **self-hosted execute runtime** you deploy (`cmd/execute-runner`: a DSL *interpreter*, not a code sandbox — no user JS, SSRF-guarded; see [`docs/EXECUTE_RUNTIME.md`](docs/EXECUTE_RUNTIME.en.md)). Either way the deliverable a security/compliance team reads is the **generated TypeScript**, not an opaque binary or a hosted runtime you have to trust.
+The generator only emits a correct, standard, auditable project; the runtime is Feishu's own basekit FaaS. In the **container-renderer track**, when a connector / field-shortcut needs to call an external API to compute a column, that execution runs on a **self-hosted execute runtime** you deploy (`cmd/execute-runner`: a DSL *interpreter*, not a code sandbox — no user JS, SSRF-guarded, egress audited in one place; see [`docs/EXECUTE_RUNTIME.md`](docs/EXECUTE_RUNTIME.en.md)). Either way the deliverable a security/compliance team reads is the **generated TypeScript**, not an opaque binary or a hosted runtime you have to trust.
 
 ---
 
@@ -133,7 +133,7 @@ produces an Action DSL (inputs / result / execute) that compiles to an auditable
   1. **Outbound-domain allowlist, statically pre-checked** — every `execute.url` host must be covered by `domains` (`addDomainList`). The SDK hard-rejects any fetch outside that list at runtime; we catch it at compile time first.
   2. **Expression allowlist — never `eval`, never arbitrary code.** `expr` is a tiny grammar (`number | 'string' | rand() | in.<key> | res.<path>` with `+ - * / % ( )` and an allowlisted set of pure-JS functions, including comparison/boolean/conditional helpers `eq`/`gt`/`and`/`if`/`coalesce`). Forbidden tokens (`; = [ ] { } $ \` " \\ // ?: & | ! < >`) are rejected outright — so even conditionals go through allowlisted functions, never raw operators. The expression is the *one* place a generator could otherwise smuggle JS, so it is allowlisted, not interpreted.
   3. **URL placeholder validation** — every `{placeholder}` in a URL or POST body must reference a declared input.
-- **Storage is Feishu Bitable itself — zero external database.** The platform's own data (app/plugin definitions + per-user ownership) lives in a 多维表格, not Postgres/Redis. For a privately-deployed 信创/政企 product this is a feature, not a compromise: one fewer component to deploy, harden and back up; Feishu provides the durability (and the Base can be exported/snapshotted for retention); and admins can inspect/audit every stored definition in a familiar table UI — the platform dogfoods the very capability it sells. Reads go through a short-TTL cache with table-scoped queries (`GET /api/apps?tableId=`), so it holds up for the read-heavy reality (many viewers, few authors). **Scale envelope, stated honestly:** writes are low-frequency admin actions (publishing a plugin), bounded by the Feishu per-app QPS; cross-replica reads can be up to the cache TTL stale. A Postgres backend behind the same `store.Store` interface is an **optional** escape hatch for write-heavy / strict-DR deployments — isolated, drop-in, and *not* a prerequisite.
+- **Storage is Feishu Bitable itself — zero external database.** The platform's own data (app/plugin definitions + per-user ownership) lives in a 多维表格, not Postgres/Redis. For an enterprise self-hosting this 信创/政企 product this is a feature, not a compromise: one fewer component to deploy, harden and back up; Feishu provides the durability (and the Base can be exported/snapshotted for retention); and admins can inspect/audit every stored definition in a familiar table UI — the platform dogfoods the very capability it sells. Reads go through a short-TTL cache with table-scoped queries (`GET /api/apps?tableId=`), so it holds up for the read-heavy reality (many viewers, few authors). **Scale envelope, stated honestly:** writes are low-frequency admin actions (publishing a plugin), bounded by the Feishu per-app QPS; cross-replica reads can be up to the cache TTL stale. A Postgres backend behind the same `store.Store` interface is an **optional** escape hatch for write-heavy / strict-DR deployments — isolated, drop-in, and *not* a prerequisite.
 
 ---
 
@@ -248,7 +248,7 @@ The generated source is meant to survive a hostile read by a compliance team.
 ├── cmd/
 │   ├── api/             BFF / gateway: app CRUD, NL-generation proxy, /api/execute forward, auth
 │   ├── generator/       NL → DSL service (holds the LLM key); /shortcut/* and /action/* endpoints
-│   ├── execute-runner/  self-hosted execute runtime — the FaaS replacement for private deployments
+│   ├── execute-runner/  self-hosted execute runtime for the container/connector track (auditable; no external function hosting)
 │   ├── shortcutgen/     CLI: -nl (NL) / -action (automation) / -out (scaffold)
 │   └── bitable-bootstrap/  one-shot helper to create the backing Bitable via app credentials
 ├── internal/

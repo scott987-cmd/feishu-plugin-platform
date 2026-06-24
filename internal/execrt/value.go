@@ -2,9 +2,9 @@
 // shortcut.FieldShortcut at request time (fetch external APIs + map the response
 // into output values) instead of compiling it to a basekit TypeScript project.
 //
-// This is the runtime that replaces Feishu's basekit FaaS for private-deployment
-// customers, who have no FaaS service (see docs/EXECUTE_RUNTIME.md). The same
-// declarative DSL drives both paths; here it is interpreted, never eval'd:
+// This is the self-hosted runtime for the container-renderer track's connector /
+// field-shortcut execution (see docs/EXECUTE_RUNTIME.md). The same declarative DSL
+// drives both paths; here it is interpreted, never eval'd:
 //   - expressions go through the allowlisted grammar (shortcut.ValidateExpr),
 //   - every outbound URL host is checked against the plugin's domain allowlist,
 //   - the runtime only fetches + maps + returns; it never writes host data.

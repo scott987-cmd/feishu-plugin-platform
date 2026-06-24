@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>飞书多维表格插件生成平台 · Feishu Bitable Plugin Generator</title>
-<meta name="description" content="自然语言一句话 → 可审计的真实飞书 basekit 插件（TypeScript）+ 一键发版部署 + 自托管执行运行时。面向企业飞书，无需插件市场、无需开发团队；标准飞书与私有化部署均兼容。" />
+<meta name="description" content="自然语言一句话 → 可审计的真实飞书 basekit 插件（TypeScript）+ 一键发版部署 + 自托管执行运行时。为企业飞书而生：无需插件市场、无需开发团队，源码可逐行审计后再送审。" />
 <style>
   :root {
     --brand: #0f6e56;
@@ -337,7 +337,7 @@
 <!-- ============ HERO ============ -->
 <section class="hero">
   <div class="wrap">
-    <span class="eyebrow"><span class="dot"></span>开源 · MIT · 标准飞书与私有化均兼容</span>
+    <span class="eyebrow"><span class="dot"></span>开源 · MIT · 为企业飞书而生</span>
     <h1>用<span class="accent">一句话</span>，生成可审计的<br/>飞书 basekit 插件</h1>
     <p class="sub">自然语言一句话描述需求 → 生成可<b>人工逐行审计</b>的真实飞书 basekit 插件（TypeScript），直接上传到飞书使用。<span class="en">NL → DSL → auditable TS → real Feishu.</span></p>
     <div class="hero-actions">
@@ -432,7 +432,7 @@
   <div class="wrap">
     <span class="eyebrow"><span class="dot"></span>自托管执行 + 一键发版部署 · Self-hosted runtime &amp; one-click ship</span>
     <h2 class="section-title">不依赖任何外部托管，自己的服务器上跑起来</h2>
-    <p class="section-lead">「连接器 / 字段捷径」这类要<b>调外部 API</b> 的插件,执行逻辑跑在你自己部署的 <code>execute-runner</code> 上;改完代码到上线,一条命令完成。<b>标准飞书与私有化部署用同一套</b>,这也是企业选型的关键之一。</p>
+    <p class="section-lead">「连接器 / 字段捷径」这类要<b>调外部 API</b> 的插件,执行逻辑跑在你自己部署的 <code>execute-runner</code> 上——<b>自托管、出网集中可审计、无外部函数托管</b>;改完代码到上线,一条命令完成。这是企业选型的关键之一。</p>
 
     <div class="audience-grid">
       <div class="ac-card">
@@ -443,7 +443,7 @@
       <div class="ac-card">
         <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
         <h3>真机实测:城市 → 天气</h3>
-        <p>多维表格里「城市」一列,插件自动算出「温度 / 风速」一列,数据来自自托管运行时(<b>无外部托管函数</b>)。实测:Beijing 21.4℃、Tokyo 20.6℃、London 26.4℃、Paris 27.7℃。</p>
+        <p>多维表格里「城市」一列,插件自动算出「温度 / 风速」一列,数据来自自托管运行时(<b>无外部函数托管</b>)。实测:Beijing 21.4℃、Tokyo 20.6℃、London 26.4℃、Paris 27.7℃。</p>
       </div>
       <div class="ac-card">
         <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 7l10 5 10-5M2 17l10 5 10-5"/></svg></div>
@@ -453,7 +453,7 @@
       <div class="ac-card">
         <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg></div>
         <h3>多维表格即存储 · 零外部数据库</h3>
-        <p>平台自身的数据(插件定义 / 归属)也存进<b>多维表格</b>——<b>不引入 Postgres/Redis 等外部数据库</b>,私有化少一个要部署、加固、备份的组件;durability 由飞书托管,管理员还能在表里直接查看、审计每条定义。读路径带 TTL 缓存 + 按表查询,适配读密集的大规模使用。</p>
+        <p>平台自身的数据(插件定义 / 归属)也存进<b>多维表格</b>——<b>不引入 Postgres/Redis 等外部数据库</b>,企业自托管少一个要部署、加固、备份的组件;durability 由飞书托管,管理员还能在表里直接查看、审计每条定义。读路径带 TTL 缓存 + 按表查询,适配读密集的大规模使用。</p>
       </div>
     </div>
 
@@ -473,13 +473,13 @@ $ <b>scripts/release.sh</b> "城市天气字段捷径"
 <section id="audience">
   <div class="wrap">
     <span class="eyebrow"><span class="dot"></span>为谁打造 · Who it's for</span>
-    <h2 class="section-title">为企业飞书而生（标准飞书与私有化均兼容）</h2>
-    <p class="section-lead">你有多维表格和插件能力，却<b>没有插件市场、也没有专职开发团队</b>。这套平台把「想要一个插件」到「拿到一份可上线、可审计的源码，并一键发版部署」之间的距离，压缩成一句话。<span class="en">Works on standard Feishu; private deployment supported.</span></p>
+    <h2 class="section-title">为企业飞书而生</h2>
+    <p class="section-lead">你有多维表格和插件能力，却<b>没有插件市场、也没有专职开发团队</b>。这套平台把「想要一个插件」到「拿到一份可上线、可审计的源码，并一键发版部署」之间的距离，压缩成一句话。<span class="en">Built for enterprise Feishu.</span></p>
     <div class="audience-grid">
       <div class="ac-card">
         <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/></svg></div>
-        <h3>强合规 / 私有化部署</h3>
-        <p>同一套既可跑在标准飞书，也<b>兼容私有化部署飞书</b>。源码自带 provenance，可在内部完成代码审计后再送审上线；执行运行时自托管在你自己的服务器上。</p>
+        <h3>强合规 / 可审计送审</h3>
+        <p>源码自带 provenance，是<b>人类可读的 TypeScript 而非黑盒</b>——可在内部完成代码审计后再送审上线;执行运行时自托管在你自己的服务器上,出网集中可审计。</p>
       </div>
       <div class="ac-card">
         <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg></div>

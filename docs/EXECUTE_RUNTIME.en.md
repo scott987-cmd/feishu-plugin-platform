@@ -1,6 +1,6 @@
 > 🌐 [中文](EXECUTE_RUNTIME.md) · **English**
 
-# Self-Hosted Execute Runtime Design (Replacing the FaaS that Private-Deployment Feishu Lacks)
+# Self-Hosted Execute Runtime Design · connector / field-shortcut execution for the container-renderer track
 
 > Status: design draft (2026-06-23). Corresponds to **Phase 4** of `design.en.md` and the 🔴 red zone of `ROADMAP.en.md` (automated execute / field-formula connector extensions).
 > Decision source: the user explicitly stated on 2026-06-23, "Private deployment has no FaaS service, which is one of the reasons I had you work on k8s."

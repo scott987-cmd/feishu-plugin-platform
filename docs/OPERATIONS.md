@@ -3,7 +3,7 @@
 # 发版与部署手册(Operations)
 
 把「改完代码 → 上线到真实飞书多维表格」这条链做成**可重复、可脚本化**的流程。
-适用于**标准飞书 SaaS 与私有化部署飞书**——唯一要求是后端服务器能被飞书 webview 经 HTTPS 访问。
+适用于**企业飞书**——唯一要求是后端服务器能被飞书 webview 经 HTTPS 访问。
 
 > 一键编排:`scripts/release.sh "更新说明"`(先部署后端,再发版 widget)。
 > 配置一次:`cp scripts/deploy.example.env scripts/deploy.env` 并填值(已 gitignore)。
@@ -17,7 +17,7 @@
 | **后端服务** api / generator / **execute-runner** / caddy | 你的服务器(docker compose;或 k8s,见 `deploy/k8s/`) | `scripts/deploy-backend.sh`(全自动) |
 | **容器插件 / 渲染器 widget** | 飞书 webview(飞书托管,不在你服务器) | `scripts/release-widget.sh` 构建+上传 → 控制台确认发布(1 次点击) |
 
-- **execute-runner** = 自托管的「执行运行时」:容器插件里的「连接器 / 字段捷径」要调外部 API 时,经 `api → execute-runner` 执行(域名白名单 + SSRF 防护 + 只读)。**标准飞书与私有化飞书都用同一套**,不依赖任何外部托管函数服务。
+- **execute-runner** = 自托管的「执行运行时」:容器插件里的「连接器 / 字段捷径」要调外部 API 时,经 `api → execute-runner` 执行(域名白名单 + SSRF 防护 + 只读)。执行**集中、自托管、可审计**,不依赖任何外部托管函数服务。
 - 后端是无状态 12-factor 服务,配置走环境变量;compose ↔ k8s 平滑切换。
 
 ---

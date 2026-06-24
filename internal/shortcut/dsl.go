@@ -3,8 +3,8 @@
 // basekit TypeScript project (@lark-opdev/block-basekit-server-api).
 //
 // This is the platform's new hard currency (2026-06-22 pivot): the product is a
-// natural-language → field-shortcut generator for private-deployment customers
-// who have a Bitable + plugin capability but no marketplace and no dev team.
+// natural-language → field-shortcut generator for enterprises that have a Bitable
+// + plugin capability but no plugin marketplace and no in-house dev team.
 //
 // Two runtime targets (see docs/EXECUTE_RUNTIME.md):
 //   - Public cloud: emit a standard basekit project for the official

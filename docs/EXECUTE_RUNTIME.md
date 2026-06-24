@@ -1,6 +1,6 @@
 > 🌐 **中文** · [English](EXECUTE_RUNTIME.en.md)
 
-# 自托管 Execute 运行时设计（替代私有化飞书没有的 FaaS）
+# 自托管 Execute 运行时设计 · 容器渲染轨的连接器 / 字段捷径执行
 
 > 状态：设计稿（2026-06-23）。对应 `design.md` **Phase 4**、`ROADMAP.md` 🔴 红区（自动化 execute / 字段公式连接器扩展）。
 > 决策来源：用户 2026-06-23 明确「私有化没有 FaaS 服务，这也是我让你搞 k8s 的原因之一」。

@@ -33,7 +33,7 @@ npm run login                          # 弹有头浏览器,扫码/账号登录;
 
 ### 2. 建应用 → 拿 appId
 ```bash
-HEADED=1 node src/cli.mjs create-app --name "插件平台" --desc "私有化插件中心"
+HEADED=1 node src/cli.mjs create-app --name "插件平台" --desc "示例插件中心"
 # → APP_ID=cli_xxxxxxxxxxxxxxxx
 ```
 
@@ -50,7 +50,7 @@ node src/cli.mjs register-ext --app cli_xxxxxxxxxxxxxxxx --name 渲染器
 cd ../plugin                           # 或某个 plugin-center/<id>
 npm install
 # upload 是交互式;非交互喂「版本号 / 更新说明」绕开 inquirer 管道乱码(示例值,按需改):
-npx block-basekit-cli upload < <(printf '1.0.0\n'; sleep 3; printf '私有化插件中心首发\n'; sleep 3)
+npx block-basekit-cli upload < <(printf '1.0.0\n'; sleep 3; printf '示例插件中心首发\n'; sleep 3)
 ```
 > 这一步官方稳定可靠;publisher 只负责它前后那些「后台无 OpenAPI」的点击步骤。
 

@@ -9,7 +9,7 @@
 [![Tests](https://img.shields.io/badge/go%20test-passing-brightgreen)](#quick-start) <!-- badge placeholder -->
 [![basekit](https://img.shields.io/badge/basekit-server--api%201.0.6-0F6E56)](#what-it-generates) <!-- badge placeholder -->
 
-一个面向使用飞书的组织（**标准 SaaS 或私有化部署——两者都支持**）的自然语言 → basekit 插件生成器：它们拥有多维表格和插件能力，但**没有插件市场，也没有内部研发团队**。你只需输入一句话，平台便会产出一个标准、人类可读的 basekit TypeScript 工程，走飞书正常的上传 + 审核链路。
+一个面向使用飞书的企业（信创 / 政企 / 国企等）的自然语言 → basekit 插件生成器：它们拥有多维表格和插件能力，但**没有插件市场，也没有内部研发团队**。你只需输入一句话，平台便会产出一个标准、人类可读的 basekit TypeScript 工程，走飞书正常的上传 + 审核链路。
 
 它同时交付企业最关心的**交付**侧能力：一个**自托管的 execute 运行时**（连接器 / 字段捷径通过你自己的服务器调用外部 API——无需外部函数托管），以及**一键发布 + 部署**（`scripts/release.sh`）。详见 **[`OPERATIONS.md`](docs/OPERATIONS.md)**。
 
@@ -33,11 +33,11 @@
 
 ## 它解决的问题
 
-私有化部署的飞书自带 basekit 插件能力，但出于设计原因**没有公开市场**——没有任何地方可以"安装"一个社区字段捷径或自动化。要自己构建，就意味着雇一个懂 basekit SDK 的人。而这些组织（信创 / 政企 / 国企）大多两样都没有。
+企业飞书自带 basekit 插件能力，但**没有公开的插件市场**——没有任何地方可以"安装"一个社区字段捷径或自动化。要自己构建，就意味着雇一个懂 basekit SDK 的人。而这些组织（信创 / 政企 / 国企）大多两样都没有。
 
 本平台填补了这个空白。一个非工程师用通俗语言陈述需求，平台便产出一个**真实的 basekit 工程，其源码在上传之前就可由安全 / 合规团队逐行审阅**。生成的 TypeScript 就是交付物——不是一个不透明的二进制，也不是一个你不得不信任的托管运行时。对信创 / 政企客户而言，"自己审计，再提交审核"是卖点，而非缺陷说明。
 
-在**标准（公有云）飞书**上，运行时是飞书自有的 basekit FaaS，因此生成器的工作只是产出一个正确、标准、可审计的工程。**私有化部署的飞书没有 FaaS**——因此连接器 / 字段捷径的执行运行在一个你自行部署的**自托管 execute 运行时**上（`cmd/execute-runner`：一个 DSL *解释器*，而非代码沙箱——无用户 JS，已做 SSRF 防护；详见 [`docs/EXECUTE_RUNTIME.md`](docs/EXECUTE_RUNTIME.md)）。无论哪种方式，安全 / 合规团队审阅的交付物都是**生成的 TypeScript**，而非一个不透明的二进制或一个你不得不信任的托管运行时。
+生成器只产出正确、标准、可审计的工程，运行时是飞书自有的 basekit FaaS。在**容器渲染轨**里，「连接器 / 字段捷径」要调外部 API 算出一列时，这段执行逻辑跑在一个你自行部署的**自托管 execute 运行时**上（`cmd/execute-runner`：一个 DSL *解释器*，而非代码沙箱——无用户 JS、已做 SSRF 防护、出网集中可审计；详见 [`docs/EXECUTE_RUNTIME.md`](docs/EXECUTE_RUNTIME.md)）。无论哪种方式，安全 / 合规团队审阅的交付物都是**生成的 TypeScript**，而非一个不透明的二进制或一个你不得不信任的托管运行时。
 
 ---
 
@@ -133,7 +133,7 @@
   1. **出网域名白名单，静态预检** —— 每个 `execute.url` 的 host 都必须被 `domains`（`addDomainList`）覆盖。SDK 在运行时会硬性拒绝任何不在该列表内的 fetch；我们先在编译期就把它拦下。
   2. **表达式白名单 —— 绝不 `eval`，绝不执行任意代码。** `expr` 是一种极小的语法（`number | 'string' | rand() | in.<key> | res.<path>`，配合 `+ - * / % ( )` 以及一组白名单化的纯 JS 函数，包括比较 / 布尔 / 条件辅助函数 `eq`/`gt`/`and`/`if`/`coalesce`）。被禁的 token（`; = [ ] { } $ \` " \\ // ?: & | ! < >`）会被直接拒绝——所以即便是条件分支也走白名单函数，绝不走裸运算符。表达式是生成器*唯一*可能夹带 JS 的地方，因此它被白名单化，而非被解释执行。
   3. **URL 占位符校验** —— URL 或 POST 请求体中的每个 `{placeholder}` 都必须引用一个已声明的输入。
-- **存储就是飞书多维表格本身 —— 零外部数据库。** 平台自身的数据（应用 / 插件定义 + 按用户的归属）存放在一个 多维表格 里，而非 Postgres/Redis。对一个私有化部署的 信创/政企 产品而言，这是特性而非妥协：少一个要部署、加固和备份的组件；持久性由飞书提供（且 Base 可被导出 / 快照以做留存）；管理员可以在熟悉的表格 UI 里检视 / 审计每一条存储的定义——平台 dogfood（自食其力地使用）了它自己所售卖的能力。读取走一个短 TTL 的缓存，搭配按表作用域的查询（`GET /api/apps?tableId=`），因此能扛住"读多写少"的现实（许多查看者，少数作者）。**规模边界，老实说：** 写是低频的管理动作（发布一个插件），受飞书单应用 QPS 限制；跨副本的读可能会有至多一个缓存 TTL 的陈旧。一个位于同一 `store.Store` 接口之后的 Postgres 后端，是为写多 / 严格容灾部署准备的**可选**逃生口——隔离、可插拔，且*不是*前置条件。
+- **存储就是飞书多维表格本身 —— 零外部数据库。** 平台自身的数据（应用 / 插件定义 + 按用户的归属）存放在一个 多维表格 里，而非 Postgres/Redis。对一个企业自托管的 信创/政企 产品而言，这是特性而非妥协：少一个要部署、加固和备份的组件；持久性由飞书提供（且 Base 可被导出 / 快照以做留存）；管理员可以在熟悉的表格 UI 里检视 / 审计每一条存储的定义——平台 dogfood（自食其力地使用）了它自己所售卖的能力。读取走一个短 TTL 的缓存，搭配按表作用域的查询（`GET /api/apps?tableId=`），因此能扛住"读多写少"的现实（许多查看者，少数作者）。**规模边界，老实说：** 写是低频的管理动作（发布一个插件），受飞书单应用 QPS 限制；跨副本的读可能会有至多一个缓存 TTL 的陈旧。一个位于同一 `store.Store` 接口之后的 Postgres 后端，是为写多 / 严格容灾部署准备的**可选**逃生口——隔离、可插拔，且*不是*前置条件。
 
 ---
 
@@ -248,7 +248,7 @@ npm run pack     # block-basekit-cli pack:field → output/*.zip
 ├── cmd/
 │   ├── api/             BFF / gateway: app CRUD, NL-generation proxy, /api/execute forward, auth
 │   ├── generator/       NL → DSL service (holds the LLM key); /shortcut/* and /action/* endpoints
-│   ├── execute-runner/  self-hosted execute runtime — the FaaS replacement for private deployments
+│   ├── execute-runner/  self-hosted execute runtime for the container/connector track (auditable; no external function hosting)
 │   ├── shortcutgen/     CLI: -nl (NL) / -action (automation) / -out (scaffold)
 │   └── bitable-bootstrap/  one-shot helper to create the backing Bitable via app credentials
 ├── internal/

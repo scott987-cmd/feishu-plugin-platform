@@ -3,7 +3,7 @@
 # Release & Deployment Handbook (Operations)
 
 Turn the "code changed → live on a real Feishu Bitable" chain into a **repeatable, scriptable** process.
-Applies to **both standard Feishu SaaS and self-hosted (privatized) Feishu** — the only requirement is that the backend server can be reached by the Feishu webview over HTTPS.
+Applies to **enterprise Feishu** — the only requirement is that the backend server can be reached by the Feishu webview over HTTPS.
 
 > One-shot orchestration: `scripts/release.sh "release notes"` (deploys the backend first, then ships the widget).
 > Configure once: `cp scripts/deploy.example.env scripts/deploy.env` and fill in the values (already gitignored).
@@ -17,7 +17,7 @@ Applies to **both standard Feishu SaaS and self-hosted (privatized) Feishu** —
 | **Backend services** api / generator / **execute-runner** / caddy | Your server (docker compose; or k8s, see `deploy/k8s/`) | `scripts/deploy-backend.sh` (fully automated) |
 | **Container plugin / renderer widget** | Feishu webview (hosted by Feishu, not on your server) | `scripts/release-widget.sh` build + upload → confirm publish in console (1 click) |
 
-- **execute-runner** = the self-hosted "execution runtime": when a "connector / field shortcut" inside a container plugin needs to call an external API, it goes through `api → execute-runner` (domain allowlist + SSRF protection + read-only). **Standard Feishu and privatized Feishu both use the same setup**, with no dependency on any externally hosted function service.
+- **execute-runner** = the self-hosted "execution runtime": when a "connector / field shortcut" inside a container plugin needs to call an external API, it goes through `api → execute-runner` (domain allowlist + SSRF protection + read-only). Execution is **centralized, self-hosted, and auditable**, with no dependency on any externally hosted function service.
 - The backend is a stateless 12-factor service, configured via environment variables; compose ↔ k8s switch smoothly.
 
 ---
