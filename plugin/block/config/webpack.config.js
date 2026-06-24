@@ -85,7 +85,10 @@ const config = {
     // 用法:PLATFORM_API_BASE=https://... PLATFORM_API_TOKEN=... npm run build
     new webpack.DefinePlugin({
       'process.env.PLATFORM_API_BASE': JSON.stringify(process.env.PLATFORM_API_BASE || ''),
-      'process.env.PLATFORM_API_TOKEN': JSON.stringify(process.env.PLATFORM_API_TOKEN || ''),
+      // ONLY the read-only token is injected into the client bundle. The admin
+      // PLATFORM_API_TOKEN is deliberately NOT defined here so it can never be
+      // baked into a browser bundle, even if it is present in the build env.
+      'process.env.PLATFORM_READ_TOKEN': JSON.stringify(process.env.PLATFORM_READ_TOKEN || ''),
     }),
     new HtmlWebpackPlugin({
       filename: 'index.html',

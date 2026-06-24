@@ -25,6 +25,7 @@ func main() {
 		ServeWeb:      getbool("SERVE_WEB", true), // dev serves the mock renderer; set false in prod
 		AllowedOrigin: getenv("ALLOWED_ORIGIN", "*"),
 		APIToken:      os.Getenv("PLATFORM_API_TOKEN"),
+		ReadToken:     os.Getenv("PLATFORM_READ_TOKEN"),
 		GenToken:      os.Getenv("GENERATOR_TOKEN"),
 		GenerateRPM:   atoiOr("GENERATE_RPM", 60),
 
@@ -45,6 +46,9 @@ func main() {
 	if cfg.GenToken == "" {
 		log.Printf("WARNING: GENERATOR_TOKEN not set — calls to the generator are UNAUTHENTICATED (set it + the generator's GENERATOR_TOKEN to the same value in production)")
 	}
+	if cfg.APIToken != "" && cfg.ReadToken == "" {
+		log.Printf("WARNING: PLATFORM_READ_TOKEN not set — the widget/web bundle must embed the ADMIN token (PLATFORM_API_TOKEN), which is then extractable by any user. Set a separate read-only token and rebuild the widget with it.")
+	}
 
 	server := api.New(st, cfg)
 	authn := buildAuth()
@@ -53,8 +57,8 @@ func main() {
 	}
 
 	srv := httpx.NewServer(":"+port, server.Routes())
-	log.Printf("api listening on :%s (generator=%s, serveWeb=%t, generateRPM=%d, auth=%t, genAuth=%t, login=%t)",
-		port, cfg.GenURL, cfg.ServeWeb, cfg.GenerateRPM, cfg.APIToken != "", cfg.GenToken != "", authn != nil)
+	log.Printf("api listening on :%s (generator=%s, serveWeb=%t, generateRPM=%d, auth=%t, readToken=%t, genAuth=%t, login=%t)",
+		port, cfg.GenURL, cfg.ServeWeb, cfg.GenerateRPM, cfg.APIToken != "", cfg.ReadToken != "", cfg.GenToken != "", authn != nil)
 	if err := httpx.Run(srv); err != nil {
 		log.Fatal(err)
 	}
@@ -72,10 +76,16 @@ func mustValidateConfig(cfg api.Config) {
 	for _, t := range []struct{ name, val string }{
 		{"GENERATOR_TOKEN", cfg.GenToken},
 		{"EXECUTE_RUNNER_TOKEN", cfg.ExecuteRunnerToken},
+		{"PLATFORM_READ_TOKEN", cfg.ReadToken},
 	} {
 		if placeholder(t.val) {
 			log.Fatalf("%s is a placeholder (REPLACE_ME) — set a real token or leave it empty for dev", t.name)
 		}
+	}
+	// A read token must differ from the admin token, else the "read-only" bundle
+	// would actually carry full admin privileges.
+	if cfg.ReadToken != "" && cfg.ReadToken == cfg.APIToken {
+		log.Fatal("PLATFORM_READ_TOKEN must differ from PLATFORM_API_TOKEN (the read token ships in the client bundle and must be read-only)")
 	}
 	if os.Getenv("STORE") == "bitable" {
 		for _, k := range []string{"FEISHU_APP_ID", "FEISHU_APP_SECRET", "FEISHU_BITABLE_APP_TOKEN", "FEISHU_BITABLE_TABLE_ID"} {

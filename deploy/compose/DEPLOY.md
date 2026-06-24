@@ -33,8 +33,9 @@ cd feishu-plugin-platform/deploy/compose
 cp .env.prod.example .env
 # 编辑 .env,填:
 #   DOMAIN=你的域名
-#   PLATFORM_API_TOKEN / EXECUTE_RUNNER_TOKEN / GENERATOR_TOKEN
-#                        # 各 $(openssl rand -hex 32),三个互不相同
+#   PLATFORM_API_TOKEN / PLATFORM_READ_TOKEN / EXECUTE_RUNNER_TOKEN / GENERATOR_TOKEN
+#                        # 各 $(openssl rand -hex 32),四个互不相同
+#                        # API=admin/写(仅服务端) READ=只读(进客户端 bundle)
 #   DEEPSEEK_API_KEY / FEISHU_APP_ID / FEISHU_APP_SECRET /
 #   FEISHU_BITABLE_APP_TOKEN / FEISHU_BITABLE_TABLE_ID
 #   ALLOWED_ORIGIN=https://<webview来源>  # 勿用 *(会拒绝启动);首跑确需放开则 ALLOWED_ORIGIN_INSECURE=true
@@ -92,12 +93,13 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d
 
 ## 4. 重打插件指向公网 + 上传
 
-插件构建期把后端地址/Token 静态注入(webpack DefinePlugin → `PLATFORM_API_BASE`/`PLATFORM_API_TOKEN`)。
+插件构建期把后端地址/**只读** Token 静态注入(webpack DefinePlugin → `PLATFORM_API_BASE`/`PLATFORM_READ_TOKEN`)。务必注入**只读** token,绝不注入 admin 的 `PLATFORM_API_TOKEN`。
 
 ```bash
 cd ../../plugin/block
-PLATFORM_API_BASE=https://<DOMAIN> PLATFORM_API_TOKEN=<TOKEN> npm run build
+PLATFORM_API_BASE=https://<DOMAIN> PLATFORM_READ_TOKEN=<READ_TOKEN> npm run build
 opdev upload ./dist            # 交互要 version/description,用 expect 精确应答(见 publisher/README 或 plugin 备注)
+# 或直接用 scripts/release-widget.sh(自动注入只读 token + 上传)
 ```
 
 到开发者后台 → 该应用「多维表格数据表视图」扩展 → 「小组件版本」选刚传的新版本。
@@ -110,7 +112,7 @@ opdev upload ./dist            # 交互要 version/description,用 expect 精确
 第一次大概率会暴露真实问题,按浏览器开发者工具排查:
 - **CORS**:控制台若报跨域,看被拒的 `Origin`,记下来 → 第 6 步收敛。
 - **SDK 数据读取**:`@lark-opdev/block-bitable-api` 的实际形状若与代码假设不符,在此暴露。
-- **鉴权**:401 说明注入的 token 与后端 `PLATFORM_API_TOKEN` 不一致(重新 build)。
+- **鉴权**:401 说明注入的只读 token 与后端 `PLATFORM_READ_TOKEN` 不一致(重新 build)。
 
 ## 6. 收敛 CORS
 

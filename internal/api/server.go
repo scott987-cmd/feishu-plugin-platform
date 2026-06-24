@@ -14,7 +14,9 @@ import (
 	"encoding/json"
 	"io"
 	"log"
+	"net"
 	"net/http"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -35,7 +37,8 @@ type Config struct {
 	WebDir        string // directory served at "/" when ServeWeb is true
 	ServeWeb      bool   // serve the mock renderer (dev); keep false in production
 	AllowedOrigin string // CORS origin ("*" for dev)
-	APIToken      string // if non-empty, require "Authorization: Bearer <token>" on /api/*
+	APIToken      string // ADMIN/write bearer: required for catalog mutations (POST/DELETE /api/apps) and (with a session) generate. Server-to-server only — never ship it to a browser.
+	ReadToken     string // READ-ONLY bearer for the in-Bitable widget + web renderer: grants GET /api/apps* and POST /api/execute only. Safe(r) to embed in a client bundle — leaking it cannot mutate the catalog or spend the LLM budget.
 	GenerateRPM   int    // max POST /api/generate per minute (0 = unlimited)
 
 	// ExecuteRunnerURL is the internal base URL of the self-hosted execute-runner
@@ -176,6 +179,31 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, d)
 }
 
+// actor identifies who performed a request for audit logs: the logged-in user's
+// open_id when a session is present, else the admin token (the only other way to
+// reach a mutating route).
+func (s *Server) actor(r *http.Request) string {
+	if u, ok := s.currentUser(r); ok {
+		return "user:" + u.OpenID
+	}
+	return "admin-token"
+}
+
+// clientIP returns the best-effort caller IP (honors a single X-Forwarded-For hop
+// from the TLS-terminating proxy).
+func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if i := strings.IndexByte(xff, ','); i >= 0 {
+			return strings.TrimSpace(xff[:i])
+		}
+		return strings.TrimSpace(xff)
+	}
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
+	}
+	return r.RemoteAddr
+}
+
 func (s *Server) handlePut(w http.ResponseWriter, r *http.Request) {
 	var d dsl.AppDefinition
 	if err := readJSON(r, &d); err != nil {
@@ -192,15 +220,18 @@ func (s *Server) handlePut(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	log.Printf("AUDIT actor=%s action=put.app id=%s ip=%s", s.actor(r), stored.ID, clientIP(r))
 	writeJSON(w, http.StatusOK, stored)
 }
 
 func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
-	if err := s.store.Delete(r.Context(), r.PathValue("id")); err != nil {
+	id := r.PathValue("id")
+	if err := s.store.Delete(r.Context(), id); err != nil {
 		log.Printf("delete: %v", err)
 		writeErr(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	log.Printf("AUDIT actor=%s action=delete.app id=%s ip=%s", s.actor(r), id, clientIP(r))
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -335,18 +366,76 @@ func (s *Server) withCORS(next http.Handler) http.Handler {
 
 // withAuth requires a bearer token on /api/* when APIToken is set. Health,
 // readiness and static assets stay open (probes, mock renderer).
+// apiCapability classifies an /api/* route by the privilege it requires:
+//   - "user":  /api/me + /api/my/* — the handler enforces the session cookie.
+//   - "read":  GET /api/apps* and POST /api/execute — render + compute. Accepts the
+//     read-only token, the admin token, or a logged-in session.
+//   - "admin": POST/DELETE /api/apps — mutating the curated container catalog.
+//     Admin token only (the CLI publishes; browsers never do).
+//   - "generate": the LLM-backed endpoints — admin token or a logged-in session.
+func apiCapability(method, path string) string {
+	switch {
+	case path == "/api/me" || strings.HasPrefix(path, "/api/my/"):
+		return "user"
+	case path == "/api/execute":
+		return "read"
+	case strings.HasPrefix(path, "/api/apps"):
+		if method == http.MethodGet {
+			return "read"
+		}
+		return "admin"
+	default:
+		return "generate"
+	}
+}
+
+// withAuth gates /api/* by capability (apiCapability) against three credentials:
+// the admin token (cfg.APIToken), the read-only token (cfg.ReadToken), and a
+// logged-in user session. This replaces the old single shared token so a token
+// shipped in a browser bundle can be read-only — leaking it can no longer delete
+// or overwrite the catalog, nor drive the paid generate endpoints.
 func (s *Server) withAuth(next http.Handler) http.Handler {
-	want := []byte("Bearer " + s.cfg.APIToken)
+	adminWant := []byte("Bearer " + s.cfg.APIToken)
+	readWant := []byte("Bearer " + s.cfg.ReadToken)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// /api/me and /api/my/* authenticate the END USER via the session cookie
-		// (set by the OAuth flow), not the shared machine token — exempt them here.
-		userScoped := r.URL.Path == "/api/me" || strings.HasPrefix(r.URL.Path, "/api/my/")
-		if s.cfg.APIToken != "" && strings.HasPrefix(r.URL.Path, "/api/") && !userScoped && r.Method != http.MethodOptions {
-			got := []byte(r.Header.Get("Authorization"))
-			if subtle.ConstantTimeCompare(got, want) != 1 {
-				writeErr(w, http.StatusUnauthorized, "unauthorized")
-				return
-			}
+		// Normalize the path BEFORE any prefix/capability decision: a dirty path
+		// like "//api/apps" or "/./api/apps" makes HasPrefix("/api/") false, which
+		// would skip auth entirely and rely on the mux's redirect to re-auth — a
+		// fragile invariant. path.Clean collapses these so the gate can't be evaded.
+		reqPath := path.Clean(r.URL.Path)
+		if !strings.HasPrefix(reqPath, "/api/") || r.Method == http.MethodOptions {
+			next.ServeHTTP(w, r)
+			return
+		}
+		// No tokens configured at all → dev/anonymous mode (handlers still enforce
+		// the session on /api/my/*). Keeps local dev frictionless.
+		if s.cfg.APIToken == "" && s.cfg.ReadToken == "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		cap := apiCapability(r.Method, reqPath)
+		if cap == "user" {
+			next.ServeHTTP(w, r) // session enforced downstream (currentUser)
+			return
+		}
+		got := []byte(r.Header.Get("Authorization"))
+		admin := s.cfg.APIToken != "" && subtle.ConstantTimeCompare(got, adminWant) == 1
+		read := s.cfg.ReadToken != "" && subtle.ConstantTimeCompare(got, readWant) == 1
+		_, session := s.currentUser(r) // currentUser is nil-safe when login is disabled
+		ok := false
+		switch cap {
+		case "read":
+			// If no read token is configured, the admin token still satisfies reads
+			// (back-compat: widget keeps working until it's rebuilt with the read token).
+			ok = admin || read || session
+		case "generate":
+			ok = admin || session
+		case "admin":
+			ok = admin
+		}
+		if !ok {
+			writeErr(w, http.StatusUnauthorized, "unauthorized")
+			return
 		}
 		next.ServeHTTP(w, r)
 	})

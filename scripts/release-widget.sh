@@ -24,15 +24,17 @@ source "$here/deploy.env"
 desc="${1:-release via script}"
 plugin="$repo/$PLUGIN_DIR"
 
-# Bearer:优先用配置;否则从服务器 .env 读取(避免 token 落本地)。
-token="${PLATFORM_API_TOKEN:-}"
+# 只读 Bearer:widget 只读 /api/apps + 调 execute,故内嵌 PLATFORM_READ_TOKEN(只读)。
+# 即便从 bundle 提取也无法增删改插件 / 驱动 generate(后端 withAuth 按能力区分)。
+# 绝不把 admin 的 PLATFORM_API_TOKEN 注入客户端。优先用配置;否则从服务器 .env 读取。
+token="${PLATFORM_READ_TOKEN:-}"
 if [ -z "$token" ]; then
-  : "${SERVER_HOST:?未配置 PLATFORM_API_TOKEN 且缺 SERVER_HOST(无法从服务器取 token)}"
+  : "${SERVER_HOST:?未配置 PLATFORM_READ_TOKEN 且缺 SERVER_HOST(无法从服务器取 token)}"
   : "${SSH_KEY:?缺 SSH_KEY}" ; : "${REMOTE_DIR:=~/fpp}"
-  echo "▶ 从服务器读取 PLATFORM_API_TOKEN(不落本地)…"
+  echo "▶ 从服务器读取 PLATFORM_READ_TOKEN(不落本地)…"
   # shellcheck disable=SC2029
-  token="$(ssh -i "$SSH_KEY" "$SERVER_HOST" "grep '^PLATFORM_API_TOKEN=' $REMOTE_DIR/deploy/compose/.env | cut -d= -f2-")"
-  [ -n "$token" ] || { echo "服务器 .env 未取到 PLATFORM_API_TOKEN"; exit 1; }
+  token="$(ssh -i "$SSH_KEY" "$SERVER_HOST" "grep '^PLATFORM_READ_TOKEN=' $REMOTE_DIR/deploy/compose/.env | cut -d= -f2-")"
+  [ -n "$token" ] || { echo "服务器 .env 未取到 PLATFORM_READ_TOKEN(请在 .env 设置只读 token)"; exit 1; }
 fi
 
 echo "▶ 1/3 注入真实 appId / blockTypeID…"
@@ -45,8 +47,8 @@ import json,sys
 p,btid=sys.argv[1],sys.argv[2]; d=json.load(open(p)); d['blockTypeID']=btid; json.dump(d,open(p,'w'),indent=2,ensure_ascii=False)
 PY
 
-echo "▶ 2/3 构建 widget(注入 $PLATFORM_API_BASE + Bearer)…"
-( cd "$plugin/block" && PLATFORM_API_BASE="$PLATFORM_API_BASE" PLATFORM_API_TOKEN="$token" npm run build >/dev/null )
+echo "▶ 2/3 构建 widget(注入 $PLATFORM_API_BASE + 只读 Bearer)…"
+( cd "$plugin/block" && PLATFORM_API_BASE="$PLATFORM_API_BASE" PLATFORM_READ_TOKEN="$token" npm run build >/dev/null )
 grep -rq "$(echo "$PLATFORM_API_BASE" | sed 's#https\?://##')" "$plugin/block/dist" \
   && echo "  ✓ 后端地址已注入 dist" || { echo "  ✗ dist 未注入后端地址,终止"; exit 1; }
 

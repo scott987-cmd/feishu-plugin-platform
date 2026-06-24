@@ -54,9 +54,13 @@ stringData:
   DEEPSEEK_API_KEY: "REPLACE_ME"
   FEISHU_APP_ID: "REPLACE_ME"
   FEISHU_APP_SECRET: "REPLACE_ME"
-  # Shared bearer token the container plugin sends as Authorization: Bearer <...>.
+  # ADMIN/write bearer: catalog mutations (POST/DELETE /api/apps) + generate.
+  # Server-to-server only (CLI/publish) — NEVER ship it to a browser bundle.
   # Generate a strong random value (e.g. openssl rand -hex 32).
   PLATFORM_API_TOKEN: "REPLACE_ME"
+  # READ-ONLY bearer embedded in the widget/web bundle: GET /api/apps* + /api/execute.
+  # Must DIFFER from PLATFORM_API_TOKEN; leaking it cannot mutate or spend budget.
+  PLATFORM_READ_TOKEN: "REPLACE_ME"
   # Bearer the api presents to the execute-runner (call-chain B). Generate a
   # separate strong random value; the api reads it as EXECUTE_RUNNER_TOKEN and
   # the runner enforces it as its PLATFORM_API_TOKEN.

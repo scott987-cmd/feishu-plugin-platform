@@ -30,15 +30,15 @@ export const API_BASE: string = ((): string => {
 })();
 
 /**
- * 平台 API token —— 构建期注入 process.env.PLATFORM_API_TOKEN。后端设置了
- * PLATFORM_API_TOKEN 时,/api/* 要求 Authorization: Bearer。
- * 注意:前端内嵌的 token 对终端用户可见,仅适用于"企业内部自用、插件只发本企业"
- * 的场景;面向多用户/外部时应升级为用户级鉴权(见 PRODUCTION.md §7)。
+ * 平台 API token —— 构建期注入。容器 widget 只读 /api/apps 并调 /api/execute,
+ * 因此**只**内嵌只读 token(PLATFORM_READ_TOKEN):它对终端用户可见,但即便泄露也
+ * 无法增删改插件、无法驱动花钱的 generate 端点(后端 withAuth 按能力区分)。
+ * 刻意不回退 admin 的 PLATFORM_API_TOKEN —— 绝不让 admin token 进客户端 bundle。
  */
 export const API_TOKEN: string = ((): string => {
   // 同 API_BASE:直接读 DefinePlugin 注入值,勿用 typeof process 守卫。
   let t: string | undefined;
-  try { t = process.env.PLATFORM_API_TOKEN; } catch { t = undefined; }
+  try { t = process.env.PLATFORM_READ_TOKEN; } catch { t = undefined; }
   return t ? String(t) : "";
 })();
 

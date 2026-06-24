@@ -36,7 +36,9 @@ module.exports = (_env, argv) => {
       // Usage: PLATFORM_API_BASE=https://... PLATFORM_API_TOKEN=... npm run build
       new webpack.DefinePlugin({
         "process.env.PLATFORM_API_BASE": JSON.stringify(process.env.PLATFORM_API_BASE || ""),
-        "process.env.PLATFORM_API_TOKEN": JSON.stringify(process.env.PLATFORM_API_TOKEN || ""),
+        // ONLY the read-only token is injected; the admin PLATFORM_API_TOKEN is
+        // deliberately never defined here so it cannot be baked into a browser bundle.
+        "process.env.PLATFORM_READ_TOKEN": JSON.stringify(process.env.PLATFORM_READ_TOKEN || ""),
       }),
     ],
     devtool: isProd ? false : "source-map",

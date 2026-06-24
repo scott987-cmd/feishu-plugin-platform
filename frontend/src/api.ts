@@ -7,8 +7,10 @@
 import type { AppDefinition } from "./dsl";
 
 // 最小 ambient 声明 —— 避免为读一个构建期注入的环境变量而引入 @types/node。
-// webpack 用 DefinePlugin 注入时，process.env.PLATFORM_API_BASE 会被静态替换为字符串字面量。
-declare const process: { env?: Record<string, string | undefined> } | undefined;
+// DefinePlugin 把 `process.env.PLATFORM_*` 静态替换为字符串字面量;读取仍用 try/catch
+// 兜底(未注入时)。声明 env 为非可空,这样直接读 `process.env.X` 可通过 strict tsc
+// 且保留 DefinePlugin 能识别的字面量形态(与 plugin/block 一致)。
+declare const process: { env: Record<string, string | undefined> };
 
 /**
  * 平台 API 基址。
@@ -18,35 +20,22 @@ declare const process: { env?: Record<string, string | undefined> } | undefined;
  * 说明: webpack 默认不注入 process.env，这里做了存在性保护，未注入时回退默认值。
  */
 export const API_BASE: string = ((): string => {
-  try {
-    const fromEnv =
-      typeof process !== "undefined" && process && process.env
-        ? process.env.PLATFORM_API_BASE
-        : undefined;
-    if (fromEnv) return String(fromEnv).replace(/\/+$/, "");
-  } catch {
-    // 忽略: 浏览器环境下 process 未定义。
-  }
-  return "http://localhost:8080";
+  // 直接读 DefinePlugin 注入值。勿用 `typeof process` 守卫:DefinePlugin 只替换
+  // `process.env.PLATFORM_API_BASE` 字面量、不定义 `process` 本身,守卫会短路导致
+  // 注入值永远读不到(真机回退 localhost)。
+  let f: string | undefined;
+  try { f = process.env.PLATFORM_API_BASE; } catch { f = undefined; }
+  return f ? String(f).replace(/\/+$/, "") : "http://localhost:8080";
 })();
 
 /**
- * 平台 API token —— 构建期注入 process.env.PLATFORM_API_TOKEN。后端设置了
- * PLATFORM_API_TOKEN 时,/api/* 要求 Authorization: Bearer。
- * 注意:前端内嵌的 token 对终端用户可见,仅适用于"企业内部自用、插件只发本企业"
- * 的场景;面向多用户/外部时应升级为用户级鉴权(见 PRODUCTION.md §7)。
+ * 平台 API token —— 构建期注入。只读端(列表/渲染)只内嵌只读 token
+ * (PLATFORM_READ_TOKEN);刻意不回退 admin 的 PLATFORM_API_TOKEN,绝不进 bundle。
  */
 export const API_TOKEN: string = ((): string => {
-  try {
-    const t =
-      typeof process !== "undefined" && process && process.env
-        ? process.env.PLATFORM_API_TOKEN
-        : undefined;
-    if (t) return String(t);
-  } catch {
-    // 忽略: 浏览器环境下 process 未定义。
-  }
-  return "";
+  let t: string | undefined;
+  try { t = process.env.PLATFORM_READ_TOKEN; } catch { t = undefined; }
+  return t ? String(t) : "";
 })();
 
 /** 统一的 fetch + JSON 解析 + 错误规整。 */

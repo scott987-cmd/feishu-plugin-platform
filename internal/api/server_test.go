@@ -123,3 +123,51 @@ func TestCRUDValidation(t *testing.T) {
 		t.Errorf("get missing = %d, want 404", c)
 	}
 }
+
+// TestTokenCapabilitySplit verifies B1: the read-only token can render (GET
+// /api/apps, POST /api/execute) but CANNOT mutate the catalog (POST/DELETE
+// /api/apps) or drive the paid generate endpoints — only the admin token can.
+func TestTokenCapabilitySplit(t *testing.T) {
+	ts := newTestServer(Config{APIToken: "admin", ReadToken: "readonly"})
+	defer ts.Close()
+
+	// read token: reads OK, mutations + generate rejected.
+	if c := do(t, "GET", ts.URL+"/api/apps", "readonly", ""); c != 200 {
+		t.Errorf("read token GET /api/apps = %d, want 200", c)
+	}
+	if c := do(t, "POST", ts.URL+"/api/apps", "readonly", validDefJSON()); c != 401 {
+		t.Errorf("read token POST /api/apps = %d, want 401 (admin-only)", c)
+	}
+	if c := do(t, "DELETE", ts.URL+"/api/apps/app-x", "readonly", ""); c != 401 {
+		t.Errorf("read token DELETE /api/apps = %d, want 401 (admin-only)", c)
+	}
+	if c := do(t, "POST", ts.URL+"/api/generate", "readonly", `{"mode":"template","template":"sales_dashboard"}`); c != 401 {
+		t.Errorf("read token POST /api/generate = %d, want 401 (admin/session-only)", c)
+	}
+	// read token may reach /api/execute (auth passes; 503 because no runner configured, NOT 401).
+	if c := do(t, "POST", ts.URL+"/api/execute", "readonly", `{"dsl":{},"inputs":{}}`); c == 401 {
+		t.Errorf("read token POST /api/execute = 401, want auth to pass (any non-401)")
+	}
+
+	// admin token: full access.
+	if c := do(t, "POST", ts.URL+"/api/apps", "admin", validDefJSON()); c != 200 {
+		t.Errorf("admin token POST /api/apps = %d, want 200", c)
+	}
+	if c := do(t, "DELETE", ts.URL+"/api/apps/app-x", "admin", ""); c != 204 {
+		t.Errorf("admin token DELETE /api/apps = %d, want 204", c)
+	}
+
+	// wrong token: rejected everywhere.
+	if c := do(t, "GET", ts.URL+"/api/apps", "nope", ""); c != 401 {
+		t.Errorf("bad token GET /api/apps = %d, want 401", c)
+	}
+
+	// Dirty-path evasion: a doubled/relative slash must NOT skip auth. With the
+	// read token, POST //api/apps and /./api/apps must be auth-checked, never
+	// dispatched to the mutating handler (200/204).
+	for _, p := range []string{"//api/apps", "/./api/apps"} {
+		if c := do(t, "POST", ts.URL+p, "readonly", validDefJSON()); c == 200 || c == 204 {
+			t.Errorf("read token POST %s = %d, want auth-checked (not a successful mutation)", p, c)
+		}
+	}
+}
