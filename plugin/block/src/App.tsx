@@ -590,14 +590,20 @@ const ENRICH_CAP = 20;
 const EnrichTile: Renderer = ({ c, records }) => {
   const inputField = c.inputField ?? '';
   const formKey = c.formKey ?? '';
-  const rows = records.slice(0, ENRICH_CAP);
+  // toLabel turns empty cells into the literal "（空）" — treat that as empty so we
+  // skip blank rows (otherwise we'd call execute with an empty value).
+  const cityOf = (r: Record<string, unknown>): string => {
+    const s = toLabel(r[inputField]);
+    return s === '（空）' ? '' : s;
+  };
+  const rows = records.filter((r) => cityOf(r) !== '').slice(0, ENRICH_CAP);
   const res = useAsync(async () => {
     if (!c.executeDsl || !inputField || !formKey) {
       throw new Error('enrich 组件缺少 executeDsl / inputField / formKey');
     }
     return Promise.all(
       rows.map(async (r) => {
-        const input = toLabel(r[inputField]);
+        const input = cityOf(r);
         if (!input) return { input: '', data: {} as Record<string, unknown> };
         try {
           const data = await execute(c.executeDsl, { [formKey]: input });
