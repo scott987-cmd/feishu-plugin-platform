@@ -12,6 +12,7 @@
 //   - Private deployment: there is NO Feishu FaaS — internal/execrt INTERPRETS
 //     this same DSL at request time on the customer's own k8s. The declarative,
 //     allowlisted shape below is exactly what makes that safe to interpret.
+//
 // The generated source being human-readable + auditable (with provenance) is
 // itself the selling point for 信创/政企 customers.
 //
@@ -30,14 +31,14 @@ import (
 
 // FieldShortcut is one generated field-shortcut plugin.
 type FieldShortcut struct {
-	ID        string     `json:"id"`          // project name; opdev/package identity
-	Title     I18n       `json:"title"`       // human display name (project meta + readme)
-	Domains   []string   `json:"domains"`     // addDomainList outbound allowlist (hard-enforced by SDK)
-	Auth      *Auth      `json:"auth,omitempty"` // optional credential the end-user supplies at config time
-	FormItems []FormItem `json:"formItems"`   // shortcut inputs
-	Result    Result     `json:"result"`      // output (writeback) shape
-	Execute   Execute    `json:"execute"`     // single fetch + map plan (or omit and use Steps)
-	Steps     []Step     `json:"steps,omitempty"` // optional: ordered multi-step pipeline (chaining); mutually exclusive with Execute
+	ID        string     `json:"id"`                  // project name; opdev/package identity
+	Title     I18n       `json:"title"`               // human display name (project meta + readme)
+	Domains   []string   `json:"domains"`             // addDomainList outbound allowlist (hard-enforced by SDK)
+	Auth      *Auth      `json:"auth,omitempty"`      // optional credential the end-user supplies at config time
+	FormItems []FormItem `json:"formItems"`           // shortcut inputs
+	Result    Result     `json:"result"`              // output (writeback) shape
+	Execute   Execute    `json:"execute"`             // single fetch + map plan (or omit and use Steps)
+	Steps     []Step     `json:"steps,omitempty"`     // optional: ordered multi-step pipeline (chaining); mutually exclusive with Execute
 	CreatedBy *Creator   `json:"createdBy,omitempty"` // the Feishu user who created this (attribution; carried into the rendered source + dsl.json)
 }
 
@@ -66,11 +67,11 @@ func attributionComment(c *Creator) string {
 // Mapped to the SDK's Authorization types. Phase-0 supports the two that cover
 // most APIs: a bearer header and a query-param token (e.g. OpenWeatherMap appid).
 type Auth struct {
-	ID              string `json:"id"`              // referenced as fetch(url, init, id)
-	Type            string `json:"type"`            // HeaderBearerToken | QueryParamToken
-	Label           string `json:"label"`           // shown to the user (what credential to enter)
-	Platform        string `json:"platform"`        // which platform the credential is for
-	InstructionsURL string `json:"instructionsUrl"` // where the user learns how to get the credential
+	ID              string `json:"id"`                  // referenced as fetch(url, init, id)
+	Type            string `json:"type"`                // HeaderBearerToken | QueryParamToken
+	Label           string `json:"label"`               // shown to the user (what credential to enter)
+	Platform        string `json:"platform"`            // which platform the credential is for
+	InstructionsURL string `json:"instructionsUrl"`     // where the user learns how to get the credential
 	ParamName       string `json:"paramName,omitempty"` // QueryParamToken only: the query key (e.g. appid)
 }
 
@@ -161,7 +162,7 @@ type Step struct {
 // Allowed enum values, kept explicit so LLM/DSL output can be validated and
 // refused before we render any TypeScript.
 var (
-	ValidComponents  = []string{"FieldSelect", "Input", "SingleSelect"}
+	ValidComponents = []string{"FieldSelect", "Input", "SingleSelect"}
 	// ValidFieldTypes are the SDK FieldType names usable as result column types and
 	// (for FieldSelect) pickable input types. Scalar types (Phone/Email/Currency/
 	// Progress/Rating/Barcode) carry the same string/number value as Text/Number —
@@ -171,8 +172,8 @@ var (
 	ValidFieldTypes = []string{"Number", "Text", "DateTime", "SingleSelect", "Checkbox", "Phone", "Email", "Currency", "Progress", "Rating", "Barcode", "Url", "MultiSelect"}
 	// primaryFieldTypes: the SDK restricts a PRIMARY result column to Text | Number.
 	primaryFieldTypes = []string{"Text", "Number"}
-	ValidResultKinds = []string{"object"}
-	ValidMethods     = []string{"GET", "POST", "PUT", "PATCH", "DELETE"}
+	ValidResultKinds  = []string{"object"}
+	ValidMethods      = []string{"GET", "POST", "PUT", "PATCH", "DELETE"}
 	// Authorization types we render + verify (subset of the SDK's 8 — the ones
 	// that cover the vast majority of real APIs).
 	ValidAuthTypes = []string{"HeaderBearerToken", "QueryParamToken", "CustomHeaderToken", "Basic"}
@@ -309,6 +310,16 @@ func (f FieldShortcut) Validate() error {
 		}
 		// Each property is either a template (string with {key} placeholders) or
 		// an expression. res.* is only valid in fetch mode.
+		// Length-cap expr/template: the evaluator is a recursive-descent parser, so
+		// an unbounded expression can overflow the goroutine stack (a fatal,
+		// recover()-proof crash of the shared runner). Capping length bounds the
+		// reachable nesting depth on BOTH the api validation path and the runtime.
+		if len(p.Template) > MaxStrLen {
+			errs = append(errs, fmt.Errorf("result.properties[%d].template too long (%d > %d)", i, len(p.Template), MaxStrLen))
+		}
+		if len(p.Expr) > MaxStrLen {
+			errs = append(errs, fmt.Errorf("result.properties[%d].expr too long (%d > %d)", i, len(p.Expr), MaxStrLen))
+		}
 		hasTpl := strings.TrimSpace(p.Template) != ""
 		hasExpr := strings.TrimSpace(p.Expr) != ""
 		switch {

@@ -33,10 +33,11 @@ cd feishu-plugin-platform/deploy/compose
 cp .env.prod.example .env
 # 编辑 .env,填:
 #   DOMAIN=你的域名
-#   PLATFORM_API_TOKEN=$(openssl rand -hex 32)   # 强随机 token
+#   PLATFORM_API_TOKEN / EXECUTE_RUNNER_TOKEN / GENERATOR_TOKEN
+#                        # 各 $(openssl rand -hex 32),三个互不相同
 #   DEEPSEEK_API_KEY / FEISHU_APP_ID / FEISHU_APP_SECRET /
 #   FEISHU_BITABLE_APP_TOKEN / FEISHU_BITABLE_TABLE_ID
-#   ALLOWED_ORIGIN=*     # 首跑临时放开,第 6 步收敛
+#   ALLOWED_ORIGIN=https://<webview来源>  # 勿用 *(会拒绝启动);首跑确需放开则 ALLOWED_ORIGIN_INSECURE=true
 nano .env
 
 docker compose -f docker-compose.prod.yml --env-file .env up -d --build

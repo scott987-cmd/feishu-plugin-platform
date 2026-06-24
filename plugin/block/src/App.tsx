@@ -694,6 +694,34 @@ const Comp: Renderer = ({ c, records }) => {
   return <R c={c} records={records} />;
 };
 
+// ErrorBoundary isolates a single plugin section: a malformed/legacy stored def
+// or a throwing renderer degrades to a placeholder instead of blanking the whole
+// panel (which renders every app bound to the table — one bad def must not take
+// down the rest). Reset key lets it recover when the underlying def changes.
+class ErrorBoundary extends React.Component<
+  { resetKey?: unknown; children: React.ReactNode },
+  { failed: boolean }
+> {
+  constructor(props: { resetKey?: unknown; children: React.ReactNode }) {
+    super(props);
+    this.state = { failed: false };
+  }
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidUpdate(prev: { resetKey?: unknown }) {
+    if (prev.resetKey !== this.props.resetKey && this.state.failed) {
+      this.setState({ failed: false });
+    }
+  }
+  render() {
+    if (this.state.failed) {
+      return <div className="tile warn">这个插件无法渲染(定义可能不兼容);其它插件不受影响。</div>;
+    }
+    return this.props.children;
+  }
+}
+
 export const App = () => {
   const r = useAsync(load, []);
   return (
@@ -713,19 +741,23 @@ export const App = () => {
       ) : null}
       {r.result ? (
         <>
-          {r.result.defs.map((def, di) => (
-            <section key={def.id ?? di} style={di ? { marginTop: 28 } : undefined}>
-              <div className="hd">
-                <div className="mk" aria-hidden="true" />
-                <h1>{def.name}</h1>
-              </div>
-              <div className="grid">
-                {def.ui.components.map((c, i) => (
-                  <Comp key={i} c={c} records={r.result!.records} />
-                ))}
-              </div>
-            </section>
-          ))}
+          {r.result.defs
+            .filter((def) => def && def.ui && Array.isArray(def.ui.components))
+            .map((def, di) => (
+              <ErrorBoundary key={def.id ?? di} resetKey={def.id}>
+                <section style={di ? { marginTop: 28 } : undefined}>
+                  <div className="hd">
+                    <div className="mk" aria-hidden="true" />
+                    <h1>{def.name ?? '未命名插件'}</h1>
+                  </div>
+                  <div className="grid">
+                    {def.ui.components.map((c, i) => (
+                      <Comp key={i} c={c} records={r.result!.records} />
+                    ))}
+                  </div>
+                </section>
+              </ErrorBoundary>
+            ))}
         </>
       ) : null}
     </div>

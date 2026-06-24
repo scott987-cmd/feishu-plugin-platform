@@ -15,6 +15,8 @@ services:
       DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY:?需在 .env 设置 DeepSeek key}"
       MODEL: "${MODEL:-deepseek-chat}"
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      # generator 持有 LLM key,必须鉴权(api 用同值调用);不能当开放中继。
+      GENERATOR_TOKEN: "${GENERATOR_TOKEN:?需设置一个强随机 token(api↔generator 共享)}"
     expose:
       - "8090"                    # 仅容器网络可见,不对外
     restart: unless-stopped
@@ -51,8 +53,13 @@ services:
       FEISHU_BITABLE_APP_TOKEN: "${FEISHU_BITABLE_APP_TOKEN:-}"
       FEISHU_BITABLE_TABLE_ID: "${FEISHU_BITABLE_TABLE_ID:-}"
       PLATFORM_API_TOKEN: "${PLATFORM_API_TOKEN:?需设置一个强随机 bearer token}"
-      ALLOWED_ORIGIN: "${ALLOWED_ORIGIN:?填飞书 webview 来源;首跑可临时填 * 再收敛}"
+      # 填飞书 webview 来源(如 https://xxx.feishu.cn)。开了鉴权时 ALLOWED_ORIGIN=*
+      # 会被拒绝启动(凭证+通配 CORS 危险);首跑确需放开,设 ALLOWED_ORIGIN_INSECURE=true。
+      ALLOWED_ORIGIN: "${ALLOWED_ORIGIN:?填具体来源,勿用 *}"
+      ALLOWED_ORIGIN_INSECURE: "${ALLOWED_ORIGIN_INSECURE:-false}"
       GENERATE_RPM: "${GENERATE_RPM:-60}"
+      # generator 鉴权(与 generator 服务同值)。
+      GENERATOR_TOKEN: "${GENERATOR_TOKEN:?需设置一个强随机 token(api↔generator 共享)}"
       # call-chain B:api 转发 /api/execute 到内网 runner。
       EXECUTE_RUNNER_URL: "http://execute-runner:8095"
       EXECUTE_RUNNER_TOKEN: "${EXECUTE_RUNNER_TOKEN:?需设置一个强随机 token(api↔runner 共享)}"

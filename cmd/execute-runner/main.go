@@ -34,7 +34,11 @@ func main() {
 		MaxBodyBytes: int64(intEnv("EXECUTE_MAX_BODY_BYTES", 1<<20)),
 		AllowPrivate: boolEnv("EXECUTE_ALLOW_PRIVATE", false), // SSRF guard; only loosen for local dev
 	})
-	h := &handler{eng: eng, token: token}
+	maxConc := intEnv("EXECUTE_MAX_CONCURRENCY", 64)
+	if maxConc < 1 {
+		maxConc = 1
+	}
+	h := &handler{eng: eng, token: token, sem: make(chan struct{}, maxConc)}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -49,7 +53,7 @@ func main() {
 		log.Printf("WARNING: PLATFORM_API_TOKEN not set — /execute is UNAUTHENTICATED (local dev only)")
 	}
 	srv := httpx.NewServer(":"+port, mux)
-	log.Printf("execute-runner listening on :%s (auth=%t, ssrfGuard=%t)", port, token != "", !boolEnv("EXECUTE_ALLOW_PRIVATE", false))
+	log.Printf("execute-runner listening on :%s (auth=%t, ssrfGuard=%t, maxConcurrency=%d)", port, token != "", !boolEnv("EXECUTE_ALLOW_PRIVATE", false), maxConc)
 	if err := httpx.Run(srv); err != nil {
 		log.Fatal(err)
 	}
@@ -58,6 +62,7 @@ func main() {
 type handler struct {
 	eng   *execrt.Engine
 	token string
+	sem   chan struct{} // bounds concurrent /execute work; full ⇒ 429 (load shedding)
 }
 
 // executeRequest is the /execute contract. DSL is the inline field-shortcut
@@ -76,12 +81,35 @@ func (h *handler) execute(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "unauthorized"})
 		return
 	}
+	// Decode first (cheap, size-limited) so a slow client trickling the body does
+	// not hold a concurrency slot — the slot is acquired only around the expensive
+	// outbound work below.
 	var req executeRequest
 	dec := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
 	if err := dec.Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid json: " + err.Error()})
 		return
 	}
+	// Bound concurrent executes: each spawns up to MaxSteps outbound fetches, so
+	// an unbounded burst would exhaust fds/memory on the shared runner and could
+	// turn it into a DDoS amplifier. Shed load with 429 when saturated.
+	select {
+	case h.sem <- struct{}{}:
+		defer func() { <-h.sem }()
+	default:
+		w.Header().Set("Retry-After", "1")
+		writeJSON(w, http.StatusTooManyRequests, map[string]any{"ok": false, "error": "execute runtime at capacity, retry shortly"})
+		return
+	}
+	// Explicit panic safety: make the slot-release + a clean 500 refactor-proof
+	// (today net/http recovers per-connection, but a future goroutine fan-out would
+	// not — a panic there would crash the shared runner and leak the slot).
+	defer func() {
+		if p := recover(); p != nil {
+			log.Printf("execute panic: %v", p)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "internal error"})
+		}
+	}()
 	data, err := h.eng.Run(r.Context(), req.DSL, req.Inputs, req.Auth)
 	if err != nil {
 		// 422: the DSL/inputs/upstream produced a handled failure (not a bug).

@@ -28,7 +28,9 @@ data:
   # Production defaults to the persistent Bitable store. Fill the tokens below
   # (create the table once via `go run ./cmd/bitable-bootstrap`).
   STORE: "bitable"
-  FEISHU_BITABLE_APP_TOKEN: "REPLACE_ME"
+  # NOTE: FEISHU_BITABLE_APP_TOKEN is a base-wide credential and now lives in the
+  # Secret below (a ConfigMap is readable by anyone with namespace get on
+  # configmaps). Only the non-sensitive table id stays in config.
   FEISHU_BITABLE_TABLE_ID: "REPLACE_ME"
   # Lock CORS to your Feishu origin in production (not "*").
   ALLOWED_ORIGIN: "https://REPLACE.feishu.cn"
@@ -59,3 +61,9 @@ stringData:
   # separate strong random value; the api reads it as EXECUTE_RUNNER_TOKEN and
   # the runner enforces it as its PLATFORM_API_TOKEN.
   EXECUTE_RUNNER_TOKEN: "REPLACE_ME"
+  # Bearer the api presents to the generator (the generator holds the LLM key and
+  # must not be an open relay; NetworkPolicy is defense-in-depth only). Generate a
+  # separate strong random value (openssl rand -hex 32).
+  GENERATOR_TOKEN: "REPLACE_ME"
+  # Base-wide Bitable credential — kept in the Secret, not the ConfigMap.
+  FEISHU_BITABLE_APP_TOKEN: "REPLACE_ME"

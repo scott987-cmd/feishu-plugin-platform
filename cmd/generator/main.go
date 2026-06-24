@@ -3,6 +3,7 @@
 package main
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"io"
 	"log"
@@ -37,9 +38,18 @@ func main() {
 		log.Printf("WARNING: no API key for LLM_PROVIDER=%s — AI (nl) generation will fall back to the keyword router", provider)
 	}
 
-	srv := httpx.NewServer(":"+port, mux)
-	log.Printf("generator listening on :%s (provider=%s, model=%s, aiConfigured=%t)",
-		port, provider, getenv("MODEL", "deepseek-chat"), aiConfigured(provider))
+	// The generator holds the LLM API key and makes paid calls; it must not be an
+	// open relay. When GENERATOR_TOKEN is set, require it on every non-health route
+	// (the api BFF sends it). NetworkPolicy is defense-in-depth, not the sole gate
+	// — the documented k3s/flannel default does not enforce NetworkPolicy.
+	token := os.Getenv("GENERATOR_TOKEN")
+	if token == "" {
+		log.Printf("WARNING: GENERATOR_TOKEN not set — generator endpoints are UNAUTHENTICATED (anyone who can reach the port can spend the LLM budget)")
+	}
+
+	srv := httpx.NewServer(":"+port, authMiddleware(token, mux))
+	log.Printf("generator listening on :%s (provider=%s, model=%s, aiConfigured=%t, auth=%t)",
+		port, provider, getenv("MODEL", "deepseek-chat"), aiConfigured(provider), token != "")
 	if err := httpx.Run(srv); err != nil {
 		log.Fatal(err)
 	}
@@ -181,6 +191,26 @@ func handleActionZip(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", `attachment; filename="`+a.ID+`-action.zip"`)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(archive)
+}
+
+// authMiddleware requires a bearer token on every route except health/readiness
+// when token is non-empty. No-op when token is "" (local dev).
+func authMiddleware(token string, next http.Handler) http.Handler {
+	if token == "" {
+		return next
+	}
+	want := []byte("Bearer " + token)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if p := r.URL.Path; p == "/healthz" || p == "/readyz" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), want) != 1 {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

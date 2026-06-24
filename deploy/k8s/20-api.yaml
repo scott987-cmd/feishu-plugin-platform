@@ -43,7 +43,7 @@ spec:
             - name: STORE
               valueFrom: { configMapKeyRef: { name: platform-config, key: STORE } }
             - name: FEISHU_BITABLE_APP_TOKEN
-              valueFrom: { configMapKeyRef: { name: platform-config, key: FEISHU_BITABLE_APP_TOKEN } }
+              valueFrom: { secretKeyRef: { name: platform-secrets, key: FEISHU_BITABLE_APP_TOKEN } }
             - name: FEISHU_BITABLE_TABLE_ID
               valueFrom: { configMapKeyRef: { name: platform-config, key: FEISHU_BITABLE_TABLE_ID } }
             - name: FEISHU_APP_ID
@@ -60,6 +60,8 @@ spec:
               valueFrom: { configMapKeyRef: { name: platform-config, key: EXECUTE_RUNNER_URL } }
             - name: EXECUTE_RUNNER_TOKEN
               valueFrom: { secretKeyRef: { name: platform-secrets, key: EXECUTE_RUNNER_TOKEN } }
+            - name: GENERATOR_TOKEN
+              valueFrom: { secretKeyRef: { name: platform-secrets, key: GENERATOR_TOKEN } }
           readinessProbe:
             httpGet: { path: /readyz, port: 8080 }
             initialDelaySeconds: 3

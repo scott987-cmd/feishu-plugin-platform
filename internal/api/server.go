@@ -31,6 +31,7 @@ const readinessTTL = 10 * time.Second
 // Config holds the server's runtime configuration.
 type Config struct {
 	GenURL        string // generator base URL, e.g. http://generator:8090
+	GenToken      string // bearer the generator requires (GENERATOR_TOKEN); sent on every proxied call
 	WebDir        string // directory served at "/" when ServeWeb is true
 	ServeWeb      bool   // serve the mock renderer (dev); keep false in production
 	AllowedOrigin string // CORS origin ("*" for dev)
@@ -222,6 +223,9 @@ func (s *Server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if s.cfg.GenToken != "" {
+		req.Header.Set("Authorization", "Bearer "+s.cfg.GenToken)
+	}
 	resp, err := s.client.Do(req)
 	if err != nil {
 		log.Printf("generate proxy: %v", err)
@@ -293,6 +297,9 @@ func (s *Server) proxyGenerator(w http.ResponseWriter, r *http.Request, path str
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if s.cfg.GenToken != "" {
+		req.Header.Set("Authorization", "Bearer "+s.cfg.GenToken)
+	}
 	resp, err := s.client.Do(req)
 	if err != nil {
 		log.Printf("shortcut proxy %s: %v", path, err)

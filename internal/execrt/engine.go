@@ -47,6 +47,7 @@ func New(o Options) *Engine {
 		Proxy:                 http.ProxyFromEnvironment, // honor an egress allowlist proxy (HTTP_PROXY)
 		ForceAttemptHTTP2:     true,
 		MaxIdleConns:          50,
+		MaxConnsPerHost:       16, // bound concurrent dials per host (DoS-amplification floor)
 		IdleConnTimeout:       30 * time.Second,
 		TLSHandshakeTimeout:   o.Timeout,
 		ExpectContinueTimeout: time.Second,
@@ -84,10 +85,37 @@ func New(o Options) *Engine {
 		tr.DialContext = dialer.DialContext
 	}
 	return &Engine{
-		client:       &http.Client{Timeout: o.Timeout, Transport: tr},
+		client: &http.Client{
+			Timeout:   o.Timeout,
+			Transport: tr,
+			// Re-validate the per-plugin domain allowlist on EVERY redirect hop and
+			// cap hops. Without this, an allowlisted host could 302 to an arbitrary
+			// PUBLIC attacker host (the dial-time IP guard only blocks PRIVATE
+			// targets), turning any plugin into a confused-deputy exfil channel for
+			// the injected credential. Domains are carried per-request via context.
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				if len(via) >= maxRedirects {
+					return fmt.Errorf("too many redirects (%d)", len(via))
+				}
+				domains, _ := req.Context().Value(domainsCtxKey{}).([]string)
+				if len(domains) == 0 {
+					return fmt.Errorf("redirect blocked: no domain allowlist in context")
+				}
+				if err := shortcut.CheckURLHost(req.URL.String(), domains); err != nil {
+					return fmt.Errorf("redirect blocked: %w", err)
+				}
+				return nil
+			},
+		},
 		maxBodyBytes: o.MaxBodyBytes,
 	}
 }
+
+// domainsCtxKey carries the per-request domain allowlist into CheckRedirect.
+type domainsCtxKey struct{}
+
+// maxRedirects caps redirect hops (each hop is re-validated against the allowlist).
+const maxRedirects = 3
 
 // Run interprets fs with the given inputs (FormItem values) and auth (user
 // credentials keyed by Auth.ID), returning the mapped output (Result property
@@ -142,7 +170,7 @@ func (e *Engine) runSteps(ctx context.Context, fs shortcut.FieldShortcut, inputs
 		if ctype != "" {
 			headers["Content-Type"] = ctype
 		}
-		resp, err := e.fetch(ctx, s.Method, u, headers, body)
+		resp, err := e.fetch(ctx, fs.Domains, s.Method, u, headers, body)
 		if err != nil {
 			return nil, fmt.Errorf("step %q (%d): %w", s.ID, i, err)
 		}
@@ -180,7 +208,7 @@ func (e *Engine) runSingle(ctx context.Context, fs shortcut.FieldShortcut, input
 	if ctype != "" {
 		headers["Content-Type"] = ctype
 	}
-	return e.fetch(ctx, fs.Execute.Method, u, headers, body)
+	return e.fetch(ctx, fs.Domains, fs.Execute.Method, u, headers, body)
 }
 
 // applyAuth injects the user-supplied credential per the SDK auth type. Returns
@@ -206,8 +234,10 @@ func applyAuth(a *shortcut.Auth, cred, u string, headers map[string]string) (str
 }
 
 // fetch performs one outbound request and returns its parsed JSON body. Only
-// http/https are allowed; the response is size-capped and must be JSON.
-func (e *Engine) fetch(ctx context.Context, method, u string, headers map[string]string, body []byte) (any, error) {
+// http/https are allowed; the response is size-capped and must be JSON. domains
+// is the per-plugin host allowlist, carried in the request context so redirect
+// hops (CheckRedirect) are re-validated against it.
+func (e *Engine) fetch(ctx context.Context, domains []string, method, u string, headers map[string]string, body []byte) (any, error) {
 	parsed, err := url.Parse(u)
 	if err != nil {
 		return nil, fmt.Errorf("bad url: %w", err)
@@ -215,6 +245,7 @@ func (e *Engine) fetch(ctx context.Context, method, u string, headers map[string
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
 		return nil, fmt.Errorf("scheme %q not allowed", parsed.Scheme)
 	}
+	ctx = context.WithValue(ctx, domainsCtxKey{}, domains)
 	var rdr io.Reader
 	if body != nil {
 		rdr = bytes.NewReader(body)
@@ -412,11 +443,51 @@ func proxyAddrs() map[string]bool {
 	return out
 }
 
-// isPrivateIP reports loopback / link-local / private / unspecified addresses
-// the SSRF guard refuses.
+// blockedCIDRs are reserved/special ranges Go's net helpers do NOT classify as
+// private but that must never be reachable from the SSRF surface — most notably
+// the carrier-grade NAT range (RFC 6598 100.64.0.0/10), which on Alibaba Cloud
+// hosts the instance metadata service at 100.100.100.200 (stealing the runner's
+// RAM-role credentials would escalate one malicious plugin to cloud-account
+// compromise). Cloud metadata IPs are listed explicitly as defense in depth.
+var blockedCIDRs = func() []*net.IPNet {
+	cidrs := []string{
+		"100.64.0.0/10",      // RFC 6598 CGNAT (Alibaba metadata lives here)
+		"192.0.0.0/24",       // RFC 6890 IETF protocol assignments
+		"192.0.2.0/24",       // TEST-NET-1
+		"198.18.0.0/15",      // benchmarking
+		"198.51.100.0/24",    // TEST-NET-2
+		"203.0.113.0/24",     // TEST-NET-3
+		"240.0.0.0/4",        // reserved (incl. 255.255.255.255 broadcast)
+		"100.100.100.200/32", // Alibaba Cloud metadata
+		"169.254.169.254/32", // AWS/GCP/Azure metadata (also covered by link-local)
+	}
+	out := make([]*net.IPNet, 0, len(cidrs))
+	for _, c := range cidrs {
+		if _, n, err := net.ParseCIDR(c); err == nil {
+			out = append(out, n)
+		}
+	}
+	return out
+}()
+
+// isPrivateIP reports loopback / link-local / private / unspecified / reserved
+// addresses the SSRF guard refuses. It normalizes IPv4-mapped IPv6 so an
+// attacker cannot smuggle a blocked v4 address in ::ffff: form.
 func isPrivateIP(ip net.IP) bool {
-	return ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
-		ip.IsPrivate() || ip.IsUnspecified()
+	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsPrivate() || ip.IsUnspecified() {
+		return true
+	}
+	cand := ip
+	if v4 := ip.To4(); v4 != nil {
+		cand = v4 // covers ::ffff:a.b.c.d mapped addresses
+	}
+	for _, n := range blockedCIDRs {
+		if n.Contains(ip) || n.Contains(cand) {
+			return true
+		}
+	}
+	return false
 }
 
 func truncate(s string, n int) string {

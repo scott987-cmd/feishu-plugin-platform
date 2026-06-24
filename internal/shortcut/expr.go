@@ -3,6 +3,7 @@ package shortcut
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 )
@@ -104,10 +105,11 @@ func validateExpr(expr string, formKeys map[string]bool) error {
 }
 
 // translateExpr lowers a validated expression to the JS emitted inside execute():
-//   rand()        -> String(Math.random())
-//   in.<key>      -> inp.<key>
-//   res.a.b.c     -> res?.a?.b?.c           (optional chaining; response is untrusted)
-//   res.list.0.x  -> res?.list?.[0]?.x      (numeric segments are array indices)
+//
+//	rand()        -> String(Math.random())
+//	in.<key>      -> inp.<key>
+//	res.a.b.c     -> res?.a?.b?.c           (optional chaining; response is untrusted)
+//	res.list.0.x  -> res?.list?.[0]?.x      (numeric segments are array indices)
 func translateExpr(expr string) string {
 	e := strings.TrimSpace(expr)
 	// Transform only non-literal segments so 'string literals' pass through verbatim.
@@ -125,7 +127,7 @@ func translateExpr(expr string) string {
 func transformSeg(s string) string {
 	s = strings.ReplaceAll(s, "rand()", "String(Math.random())")
 	for _, fn := range exprFuncs { // allowlisted function name -> pure JS helper call
-		s = regexp.MustCompile(`\b` + fn + `\(`).ReplaceAllString(s, "_"+fn+"(")
+		s = regexp.MustCompile(`\b`+fn+`\(`).ReplaceAllString(s, "_"+fn+"(")
 	}
 	s = regexp.MustCompile(`\bin\.([A-Za-z_][A-Za-z0-9_]*)`).ReplaceAllString(s, "inp.$1")
 	s = regexp.MustCompile(`\bres((?:\.[A-Za-z0-9_]+)+)`).ReplaceAllStringFunc(s, func(m string) string {
@@ -224,16 +226,24 @@ func validateURLTemplate(u string, domains []string, formKeys map[string]bool) e
 // urlHost extracts the host from a URL template, ignoring scheme, path, query,
 // {placeholders}, and port; "" if it cannot be determined.
 func urlHost(u string) string {
-	host := u
-	if i := strings.Index(host, "://"); i >= 0 {
-		host = host[i+3:]
+	// Parse with net/url so the host we allowlist-check is exactly the host the
+	// dialer (and Go's redirect handling) uses. A hand-rolled splitter is unsafe:
+	// it disagrees with net/url on userinfo, letting `http://good.com:80@evil.com/`
+	// pass as good.com while the request actually dials evil.com (allowlist bypass
+	// / confused-deputy exfil). url.Parse cleanly handles ports, paths and
+	// {formKey} placeholders in path/query; an unresolved placeholder IN the host
+	// makes it error → empty host → rejected (host placeholders are unsupported,
+	// matching prior behavior).
+	parsed, err := url.Parse(u)
+	if err != nil || parsed.Host == "" {
+		return ""
 	}
-	for _, c := range []string{"/", "?", "{", ":", "#"} {
-		if i := strings.Index(host, c); i >= 0 {
-			host = host[:i]
-		}
+	// Userinfo in the authority has no legitimate use in a field-shortcut URL and
+	// is the bypass vector above — refuse it outright.
+	if parsed.User != nil {
+		return ""
 	}
-	return host
+	return parsed.Hostname()
 }
 
 // checkURLHost verifies the URL's host is covered by the domains allowlist (the

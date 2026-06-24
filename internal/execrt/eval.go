@@ -9,18 +9,21 @@ import (
 )
 
 // evalExpr evaluates an allowlisted result expression over two namespaces:
-//   in.<formKey>  -> inputs[...]      res.<json.path> -> res[...]
+//
+//	in.<formKey>  -> inputs[...]      res.<json.path> -> res[...]
+//
 // It implements the SAME tiny grammar shortcut/expr.go validates and the SAME
 // helper functions shortcut emits as JS (see exprHelperDefs) — but in Go, by
 // interpretation. The caller MUST have run shortcut.ValidateExpr first; this
 // evaluator is still defensive (errors instead of panicking on bad shapes).
 //
 // Grammar:
-//   expr   = addsub
-//   addsub = muldiv (('+'|'-') muldiv)*
-//   muldiv = unary  (('*'|'/'|'%') unary)*
-//   unary  = '-'? primary
-//   primary= number | 'string' | rand() | func '(' args? ')' | in.<p> | res.<p> | '(' expr ')'
+//
+//	expr   = addsub
+//	addsub = muldiv (('+'|'-') muldiv)*
+//	muldiv = unary  (('*'|'/'|'%') unary)*
+//	unary  = '-'? primary
+//	primary= number | 'string' | rand() | func '(' args? ')' | in.<p> | res.<p> | '(' expr ')'
 func evalExpr(expr string, inputs map[string]any, res any) (any, error) {
 	toks, err := lexExpr(expr)
 	if err != nil {
@@ -98,14 +101,26 @@ func lexExpr(s string) ([]token, error) {
 type evaluator struct {
 	toks   []token
 	pos    int
+	depth  int
 	inputs map[string]any
 	res    any
 }
+
+// maxExprDepth bounds parenthesis/operator nesting. The parser is recursive
+// descent (4 frames per nesting level), so without this a deeply-nested
+// expression overflows the goroutine stack — a FATAL runtime error that
+// recover() CANNOT catch, crashing the whole shared runner. shortcut.Validate
+// also length-caps Expr/Template so a 1MiB body can't reach a huge depth.
+const maxExprDepth = 64
 
 func (e *evaluator) cur() token { return e.toks[e.pos] }
 func (e *evaluator) eat() token { t := e.toks[e.pos]; e.pos++; return t }
 
 func (e *evaluator) parseAddSub() (any, error) {
+	if e.depth++; e.depth > maxExprDepth {
+		return nil, fmt.Errorf("expression too deeply nested (>%d)", maxExprDepth)
+	}
+	defer func() { e.depth-- }()
 	left, err := e.parseMulDiv()
 	if err != nil {
 		return nil, err
@@ -161,6 +176,12 @@ func (e *evaluator) parseMulDiv() (any, error) {
 
 func (e *evaluator) parseUnary() (any, error) {
 	if e.cur().kind == tkOp && e.cur().text == "-" {
+		// Chained unary minus (-----x) recurses on parseUnary itself, bypassing the
+		// parseAddSub depth counter — count it here too so it can't overflow.
+		if e.depth++; e.depth > maxExprDepth {
+			return nil, fmt.Errorf("expression too deeply nested (>%d)", maxExprDepth)
+		}
+		defer func() { e.depth-- }()
 		e.eat()
 		v, err := e.parseUnary()
 		if err != nil {

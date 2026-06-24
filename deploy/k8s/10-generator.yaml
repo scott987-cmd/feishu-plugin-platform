@@ -41,6 +41,10 @@ spec:
               valueFrom: { configMapKeyRef: { name: platform-config, key: MODEL } }
             - name: DEEPSEEK_API_KEY
               valueFrom: { secretKeyRef: { name: platform-secrets, key: DEEPSEEK_API_KEY } }
+            # Require a bearer on all generator endpoints (the api sends it).
+            # Defense-in-depth over the NetworkPolicy, which a flannel CNI ignores.
+            - name: GENERATOR_TOKEN
+              valueFrom: { secretKeyRef: { name: platform-secrets, key: GENERATOR_TOKEN } }
           readinessProbe:
             httpGet: { path: /readyz, port: 8090 }
             initialDelaySeconds: 3

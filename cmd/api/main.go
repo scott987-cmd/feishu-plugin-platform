@@ -25,6 +25,7 @@ func main() {
 		ServeWeb:      getbool("SERVE_WEB", true), // dev serves the mock renderer; set false in prod
 		AllowedOrigin: getenv("ALLOWED_ORIGIN", "*"),
 		APIToken:      os.Getenv("PLATFORM_API_TOKEN"),
+		GenToken:      os.Getenv("GENERATOR_TOKEN"),
 		GenerateRPM:   atoiOr("GENERATE_RPM", 60),
 
 		ExecuteRunnerURL:   os.Getenv("EXECUTE_RUNNER_URL"),
@@ -41,6 +42,9 @@ func main() {
 	if cfg.AllowedOrigin == "*" {
 		log.Printf("WARNING: ALLOWED_ORIGIN=* (open CORS) — set a specific origin in production")
 	}
+	if cfg.GenToken == "" {
+		log.Printf("WARNING: GENERATOR_TOKEN not set — calls to the generator are UNAUTHENTICATED (set it + the generator's GENERATOR_TOKEN to the same value in production)")
+	}
 
 	server := api.New(st, cfg)
 	authn := buildAuth()
@@ -49,8 +53,8 @@ func main() {
 	}
 
 	srv := httpx.NewServer(":"+port, server.Routes())
-	log.Printf("api listening on :%s (generator=%s, serveWeb=%t, generateRPM=%d, auth=%t, login=%t)",
-		port, cfg.GenURL, cfg.ServeWeb, cfg.GenerateRPM, cfg.APIToken != "", authn != nil)
+	log.Printf("api listening on :%s (generator=%s, serveWeb=%t, generateRPM=%d, auth=%t, genAuth=%t, login=%t)",
+		port, cfg.GenURL, cfg.ServeWeb, cfg.GenerateRPM, cfg.APIToken != "", cfg.GenToken != "", authn != nil)
 	if err := httpx.Run(srv); err != nil {
 		log.Fatal(err)
 	}
@@ -62,12 +66,30 @@ func mustValidateConfig(cfg api.Config) {
 	if placeholder(cfg.APIToken) {
 		log.Fatal("PLATFORM_API_TOKEN is a placeholder (REPLACE_ME) — set a real token or leave it empty for dev")
 	}
+	// The api↔generator and api↔execute-runner bearers must not ship as the
+	// REPLACE_ME placeholder (k8s Secrets default to it); a placeholder is a known
+	// weak credential, never an intended value. Empty is allowed (dev / no auth).
+	for _, t := range []struct{ name, val string }{
+		{"GENERATOR_TOKEN", cfg.GenToken},
+		{"EXECUTE_RUNNER_TOKEN", cfg.ExecuteRunnerToken},
+	} {
+		if placeholder(t.val) {
+			log.Fatalf("%s is a placeholder (REPLACE_ME) — set a real token or leave it empty for dev", t.name)
+		}
+	}
 	if os.Getenv("STORE") == "bitable" {
 		for _, k := range []string{"FEISHU_APP_ID", "FEISHU_APP_SECRET", "FEISHU_BITABLE_APP_TOKEN", "FEISHU_BITABLE_TABLE_ID"} {
 			if v := os.Getenv(k); v == "" || placeholder(v) {
 				log.Fatalf("STORE=bitable requires %s (currently empty or placeholder)", k)
 			}
 		}
+	}
+	// Wildcard CORS combined with a credential-bearing API (auth on) lets ANY web
+	// origin script the API on a user's behalf. Refuse this combo — require an
+	// explicit origin allowlist in production. Set ALLOWED_ORIGIN_INSECURE=true to
+	// override (local tunnels/dev only).
+	if cfg.APIToken != "" && cfg.AllowedOrigin == "*" && !getbool("ALLOWED_ORIGIN_INSECURE", false) {
+		log.Fatal("refusing to start: ALLOWED_ORIGIN=* with auth enabled is unsafe — set ALLOWED_ORIGIN to a specific origin (or ALLOWED_ORIGIN_INSECURE=true to override for dev)")
 	}
 }
 
