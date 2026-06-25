@@ -150,7 +150,7 @@
 | ✅1 | **持久化审计账本 + 只读查看器** —— **已做** | M | 把现在的 `AUDIT` stdout 行(重启即丢)变成可筛选、抗篡改的 who/when/what/which-version 痕迹——正是上文「必补缺口 #1」 | 已落地:`BitableAuditStore`(复刻 BitablePluginStore 模式,追加式)+ `server.go` 写删改走 `recordAudit`(stdout + 持久化)+ `GET /api/audit`(admin、newest-first)+ `bitable-bootstrap` 建 `audit_log` 表 + `FEISHU_AUDIT_TABLE_ID` 旋钮。见 PRODUCTION §11 |
 | ✅2 | **execute-runtime 逐次出网账本** —— **已做** | M | 记录「哪个插件把哪行数据发给了哪个外部域名、为谁、放行/拦截」——信创安全团队要的 DLP 出网证据,坐实 README 已宣称的"出网集中审计" | 已落地:execrt `EgressRecorder` 接口在 `fetch` 收口逐跳记录(host/method/outcome,SSRF/重定向拦截=error)+ `WithPluginID` 归属;runner `egressRecorder` 把事件映射成 `execute.egress` 审计记录,**异步缓冲单 worker**写同一张审计表(热路径友好:满则丢并记数,绝不拖慢 execute)。见 PRODUCTION §11 |
 | ✅3 | **UI 内"试运行"(dry-run)** —— **已做** | M | 小白在走上传+审核链路前,先看插件真调 API、产出真值——杀死"生成黑盒→盲传→等审→发现错了"的循环 | 已落地(零后端改动):`web/shortcut.html` 字段捷径结果区新增「试运行」面板——按 formItems 生成样例输入框 + 凭证框,POST `{dsl,inputs,auth}` 到现成的 `/api/execute`(SSRF 守卫),展示真实映射输出(写回单元格的值);execute-runner 未配时友好提示 |
-| 4 | **人话化失败解释** | S | 小白撞上 TS 编译栈直接放弃;友好、可行动的提示留住人、降工单 | Verifier 已把 `build:field` 编译错回喂修复循环;最终失败时给这些错加一层翻译(TS2554「缺参」→「这个捷径需要你没提到的一个输入」)。最低成本广覆盖 |
+| ✅4 | **人话化失败解释** —— **已做** | S | 小白撞上 TS 编译栈直接放弃;友好、可行动的提示留住人、降工单 | 已落地:`generator.Explain(err)→(hint,detail)` 把开发者级错误(TS2554 缺参 / 域名白名单不符 / 主列类型 / 必填缺失 / 模型/网络 / repair 耗尽)翻成人话 hint;repair loop 把最后一轮的具体原因带进耗尽错误(让 hint 更精准);三个 generate handler 回 `{error:hint, detail:raw}`;UI 显示 hint + 可折叠技术细节 |
 
 ## 第二梯队
 
@@ -168,4 +168,4 @@
 - **只读管理控制台(L)**:价值高但主要是 #1/#2/#5/#6 的"打包成一块玻璃";先把底层账本/配额/审批建好(各自可独立用 + Base UI 原生看),政企验收要"单屏"时再组装。
 - **产物溯源清单 + 内容哈希(M)**:对上文 attestation 缺口有意义,但已被"可审计源码 + Created-by 溯源头"部分覆盖;高价值增量(bundle↔源码哈希对比)作为 #1 账本的一列搭车。
 
-> 落地建议:**先做第一梯队(#1+#2+#3+#4)**——审计/出网账本坐实合规与"出网集中"卖点,dry-run + 人话化解释直接提作者体验,且全是薄复用、零新依赖。第二梯队按客户实际诉求拉起。
+> ✅ **第一梯队(#1–#4)已全部落地**(审计账本 / 出网账本 / dry-run / 人话化解释)——合规与作者体验两条线都坐实,全是薄复用、零新依赖。**第二梯队按客户实际诉求拉起。**

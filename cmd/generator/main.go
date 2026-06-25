@@ -97,7 +97,8 @@ func handleGenerate(w http.ResponseWriter, r *http.Request) {
 	}
 	def, err := generator.Generate(req)
 	if err != nil {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		hint, detail := generator.Explain(err)
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": hint, "detail": detail})
 		return
 	}
 	writeJSON(w, http.StatusOK, def)
@@ -121,16 +122,18 @@ func handleShortcutGenerate(w http.ResponseWriter, r *http.Request) {
 	}
 	f, ok, err := generator.GenerateShortcut(req.Prompt)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "generation failed: " + err.Error()})
+		hint, detail := generator.Explain(err)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": hint, "detail": detail})
 		return
 	}
 	if !ok {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "AI generation unavailable (DEEPSEEK_API_KEY not set)"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "AI 生成未启用(后台没配置模型密钥)。可改用模板,或联系管理员开启 AI。", "detail": "AI generation unavailable (DEEPSEEK_API_KEY not set)"})
 		return
 	}
 	index, err := shortcut.RenderIndexTS(f)
 	if err != nil {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		hint, detail := generator.Explain(err)
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": hint, "detail": detail})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"dsl": f, "indexTs": index})
@@ -176,16 +179,18 @@ func handleActionGenerate(w http.ResponseWriter, r *http.Request) {
 	}
 	a, ok, err := generator.GenerateAction(req.Prompt)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "generation failed: " + err.Error()})
+		hint, detail := generator.Explain(err)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": hint, "detail": detail})
 		return
 	}
 	if !ok {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "AI generation unavailable (DEEPSEEK_API_KEY not set)"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "AI 生成未启用(后台没配置模型密钥)。可改用模板,或联系管理员开启 AI。", "detail": "AI generation unavailable (DEEPSEEK_API_KEY not set)"})
 		return
 	}
 	src, err := shortcut.RenderActionRegisterTS(a)
 	if err != nil {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		hint, detail := generator.Explain(err)
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": hint, "detail": detail})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"dsl": a, "registerTs": src})

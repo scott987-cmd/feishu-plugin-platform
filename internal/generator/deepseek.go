@@ -172,6 +172,7 @@ func generateViaChat(ctx context.Context, api chatAPI, model, prompt string) (ds
 		{Role: "user", Content: prompt},
 	}
 
+	var lastProblem string // the concrete reason of the final round, surfaced to Explain
 	for round := 0; round <= maxRepairRounds; round++ {
 		resp, err := api.create(ctx, oaRequest{
 			Model:      model,
@@ -216,11 +217,12 @@ func generateViaChat(ctx context.Context, api chatAPI, model, prompt string) (ds
 		}
 
 		// Feed the problem back for repair: echo the assistant turn, then a tool result.
+		lastProblem = problem
 		messages = append(messages, msg, oaMessage{
 			Role:       "tool",
 			ToolCallID: call.ID,
 			Content:    problem + ". Fix it and call " + emitToolName + " again.",
 		})
 	}
-	return dsl.AppDefinition{}, fmt.Errorf("exhausted %d repair rounds without a valid definition", maxRepairRounds)
+	return dsl.AppDefinition{}, fmt.Errorf("exhausted %d repair rounds; last problem: %s", maxRepairRounds, lastProblem)
 }

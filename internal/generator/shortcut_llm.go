@@ -231,6 +231,7 @@ func generateShortcutViaChat(ctx context.Context, api chatAPI, model, prompt str
 		{Role: "user", Content: prompt},
 	}
 
+	var lastProblem string // the concrete reason of the final round, surfaced to Explain
 	for round := 0; round <= shortcutMaxRepairs; round++ {
 		resp, err := api.create(ctx, oaRequest{
 			Model:      model,
@@ -272,11 +273,12 @@ func generateShortcutViaChat(ctx context.Context, api chatAPI, model, prompt str
 			return f, nil // valid and (if enabled) compiles
 		}
 
+		lastProblem = problem
 		messages = append(messages, msg, oaMessage{
 			Role:       "tool",
 			ToolCallID: call.ID,
 			Content:    problem + ". Fix it and call " + emitShortcutTool + " again.",
 		})
 	}
-	return shortcut.FieldShortcut{}, fmt.Errorf("exhausted %d repair rounds without a valid field shortcut", shortcutMaxRepairs)
+	return shortcut.FieldShortcut{}, fmt.Errorf("exhausted %d repair rounds; last problem: %s", shortcutMaxRepairs, lastProblem)
 }

@@ -162,6 +162,7 @@ func generateActionViaChat(ctx context.Context, api chatAPI, model, prompt strin
 		{Role: "system", Content: system},
 		{Role: "user", Content: prompt},
 	}
+	var lastProblem string // the concrete reason of the final round, surfaced to Explain
 	for round := 0; round <= shortcutMaxRepairs; round++ {
 		resp, err := api.create(ctx, oaRequest{
 			Model:      model,
@@ -199,11 +200,12 @@ func generateActionViaChat(ctx context.Context, api chatAPI, model, prompt strin
 		} else {
 			return a, nil
 		}
+		lastProblem = problem
 		messages = append(messages, msg, oaMessage{
 			Role:       "tool",
 			ToolCallID: call.ID,
 			Content:    problem + ". Fix it and call " + emitActionTool + " again.",
 		})
 	}
-	return shortcut.Action{}, fmt.Errorf("exhausted %d repair rounds without a valid action", shortcutMaxRepairs)
+	return shortcut.Action{}, fmt.Errorf("exhausted %d repair rounds; last problem: %s", shortcutMaxRepairs, lastProblem)
 }

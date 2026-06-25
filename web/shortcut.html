@@ -73,6 +73,8 @@
   .state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;min-height:360px;color:var(--faint);text-align:center}
   .state svg{width:42px;height:42px;opacity:.5}
   .err{background:var(--warn-bg);border:1px solid var(--warn-line);color:var(--warn-ink);border-radius:var(--r);padding:14px 16px;font-size:13.5px}
+  .err .detail{margin-top:8px;font-size:12px;font-family:var(--mono);opacity:.72;word-break:break-all;max-height:130px;overflow:auto;white-space:pre-wrap}
+  .err summary{cursor:pointer;font-size:12px;opacity:.85;margin-top:8px;user-select:none}
 
   .summary{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px}
   @media(max-width:620px){.summary{grid-template-columns:1fr}}
@@ -215,13 +217,14 @@ async function generate(){
     const ep = mode==='action' ? '/api/action/generate' : '/api/shortcut/generate';
     const r = await fetch(ep, {method:'POST', headers:headers(), body:JSON.stringify({prompt})});
     const data = await r.json();
-    if(!r.ok){ throw new Error(data.error || ('HTTP '+r.status)); }
+    if(!r.ok){ const err = new Error(data.error || ('HTTP '+r.status)); err.detail = data.detail; throw err; }
     lastDSL = data.dsl;
     renderResult(data.dsl, data.indexTs || data.registerTs);
     $('#chip').style.display='';
     await saveIfLoggedIn(); // logged in → 署名 + 归属到个人名下
   }catch(e){
-    $('#result').innerHTML = '<div class="err"><b>生成失败:</b> '+esc(e.message)+'</div>';
+    const det = e.detail ? `<details><summary>技术细节(给工程师看)</summary><div class="detail">${esc(e.detail)}</div></details>` : '';
+    $('#result').innerHTML = `<div class="err"><b>没生成成功:</b> ${esc(e.message)}${det}</div>`;
   }finally{
     btn.disabled = false; label.textContent = '一键生成';
   }
