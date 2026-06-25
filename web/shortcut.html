@@ -97,6 +97,20 @@
   pre.code .k{color:var(--code-key)} pre.code .s{color:var(--code-str)} pre.code .c{color:var(--code-com)}
   .actions{display:flex;gap:10px;margin-top:16px}
   .actions .btn{margin-top:0}
+
+  .dryrun{margin-top:18px;border-top:1px dashed var(--line-2);padding-top:16px}
+  .dryrun .t{font-size:12px;font-weight:650;color:var(--muted)}
+  .dryform{display:grid;gap:10px;margin:10px 0 12px}
+  .dryform label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin:0}
+  .dryform .sub{color:var(--faint);font-weight:500}
+  .dryform input{width:100%;margin-top:4px;font:inherit;font-size:13.5px;border:1px solid var(--line-2);border-radius:8px;padding:8px 11px;outline:0;color:var(--ink)}
+  .dryform input:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(15,110,86,.14)}
+  .runout{margin-top:8px}
+  .runout .ok{background:var(--brand-tint);border:1px solid #cfe9df;border-radius:var(--r);padding:12px 14px}
+  .runout .okh{font-size:12px;font-weight:650;color:var(--brand-ink);margin-bottom:6px}
+  .runout .kv{font-size:13px;margin:3px 0}
+  .runout .kv b{font-weight:650}
+  .runout .kv code{font-family:var(--mono);font-size:12px;background:#fff;border:1px solid var(--line-2);border-radius:5px;padding:1px 6px;word-break:break-all}
 </style>
 </head>
 <body>
@@ -227,6 +241,19 @@ function renderResult(dsl, src){
   const inLabel = isAction ? '配置输入' : '输入字段';
   const outLabel = isAction ? '输出结果(供后续步骤)' : '输出列(写回)';
   const codeFile = isAction ? 'src/register.ts(可审计源码)' : 'src/index.ts(可审计源码)';
+  // Dry-run panel (field shortcuts only — actions aren't executed via /api/execute).
+  // Lets the author run the freshly-generated DSL against the real API + sample inputs
+  // BEFORE the upload+review chain, so a broken plugin is caught here, not after review.
+  const dryRun = isAction ? '' : `
+    <div class="dryrun">
+      <div class="codehead"><span class="t">▶ 试运行 · 用样例数据真跑一遍(上传送审前先验证)</span><span class="spacer"></span></div>
+      <div class="dryform" id="dryform">
+        ${(dsl.formItems||[]).map(f=>`<label>${esc(f.label?.zh_CN||f.key)} <span class="sub">(${esc(f.key)})</span><input data-inkey="${esc(f.key)}" placeholder="样例值"/></label>`).join('')}
+        ${dsl.auth?`<label>${esc(dsl.auth.label||'凭证')} <span class="sub">(使用者凭证,仅本次发送、不留存)</span><input data-authcred type="password" placeholder="${esc(dsl.auth.placeholder||'API key / token')}"/></label>`:''}
+      </div>
+      <button class="btn ghost" id="run">试运行</button>
+      <div class="runout" id="runout"></div>
+    </div>`;
   $('#result').innerHTML = `
     <div class="summary">
       <div class="sumcard"><div class="k">${nameLabel}</div><div class="v">${esc(dsl.title?.zh_CN||dsl.id)}</div></div>
@@ -241,10 +268,40 @@ function renderResult(dsl, src){
     <div class="actions">
       <button class="btn" id="dl">下载工程 (.zip)</button>
       <button class="btn ghost" id="dldsl">下载 DSL (.json)</button>
-    </div>`;
+    </div>${dryRun}`;
   $('#copy').onclick = () => { navigator.clipboard.writeText(src); $('#copy').textContent='已复制'; setTimeout(()=>$('#copy').textContent='复制',1200); };
   $('#dl').onclick = downloadZip;
   $('#dldsl').onclick = () => triggerDownload(new Blob([JSON.stringify(lastDSL,null,2)],{type:'application/json'}), (lastDSL.id||'shortcut')+'.json');
+  const runBtn = $('#run'); if(runBtn) runBtn.onclick = runDryRun;
+}
+
+// runDryRun executes the freshly-generated field-shortcut DSL against the real API
+// via the existing SSRF-guarded /api/execute (inline {dsl, inputs, auth}), and shows
+// the mapped output — exactly the value that would be written to the cell.
+async function runDryRun(){
+  if(!lastDSL) return;
+  const btn = $('#run'), out = $('#runout');
+  const inputs = {};
+  document.querySelectorAll('#dryform input[data-inkey]').forEach(el => { if(el.value !== '') inputs[el.getAttribute('data-inkey')] = el.value; });
+  const auth = {};
+  const ac = document.querySelector('#dryform input[data-authcred]');
+  if(ac && ac.value && lastDSL.auth && lastDSL.auth.id) auth[lastDSL.auth.id] = ac.value;
+  btn.disabled = true; const old = btn.textContent; btn.innerHTML = '<span class="spin" style="border-color:rgba(15,110,86,.3);border-top-color:var(--brand)"></span> 运行中…';
+  out.innerHTML = '';
+  try{
+    const r = await fetch('/api/execute', {method:'POST', headers:headers(), body:JSON.stringify({dsl:lastDSL, inputs, auth})});
+    if(r.status === 503){ throw new Error('试运行需要 execute-runner(设 EXECUTE_RUNNER_URL,本地起一个即可)。'); }
+    const data = await r.json().catch(()=>({}));
+    if(!r.ok || data.ok === false){ throw new Error(data.error || ('HTTP '+r.status)); }
+    const result = data.data || {};
+    const rows = Object.keys(result).map(k => `<div class="kv"><b>${esc(k)}</b> = <code>${esc(typeof result[k]==='object'?JSON.stringify(result[k]):String(result[k]))}</code></div>`).join('')
+      || '<div class="kv" style="color:var(--muted)">(无输出列)</div>';
+    out.innerHTML = `<div class="ok"><div class="okh">✓ 真实返回 · 这就是写回单元格的值</div>${rows}</div>`;
+  }catch(e){
+    out.innerHTML = '<div class="err"><b>试运行失败:</b> '+esc(e.message)+'</div>';
+  }finally{
+    btn.disabled = false; btn.textContent = old;
+  }
 }
 
 async function downloadZip(){

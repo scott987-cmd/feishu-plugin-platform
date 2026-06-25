@@ -149,7 +149,7 @@
 |---|------|----|-----------|------------------|
 | ✅1 | **持久化审计账本 + 只读查看器** —— **已做** | M | 把现在的 `AUDIT` stdout 行(重启即丢)变成可筛选、抗篡改的 who/when/what/which-version 痕迹——正是上文「必补缺口 #1」 | 已落地:`BitableAuditStore`(复刻 BitablePluginStore 模式,追加式)+ `server.go` 写删改走 `recordAudit`(stdout + 持久化)+ `GET /api/audit`(admin、newest-first)+ `bitable-bootstrap` 建 `audit_log` 表 + `FEISHU_AUDIT_TABLE_ID` 旋钮。见 PRODUCTION §11 |
 | ✅2 | **execute-runtime 逐次出网账本** —— **已做** | M | 记录「哪个插件把哪行数据发给了哪个外部域名、为谁、放行/拦截」——信创安全团队要的 DLP 出网证据,坐实 README 已宣称的"出网集中审计" | 已落地:execrt `EgressRecorder` 接口在 `fetch` 收口逐跳记录(host/method/outcome,SSRF/重定向拦截=error)+ `WithPluginID` 归属;runner `egressRecorder` 把事件映射成 `execute.egress` 审计记录,**异步缓冲单 worker**写同一张审计表(热路径友好:满则丢并记数,绝不拖慢 execute)。见 PRODUCTION §11 |
-| 3 | **UI 内"试运行"(dry-run)** | M | 小白在走上传+审核链路前,先看插件真调 API、产出真值——杀死"生成黑盒→盲传→等审→发现错了"的循环 | execute-runner 已能跑 DSL+inputs 返回映射结果;`web/shortcut.html` 把刚生成的 DSL+样例输入 POST 到现成的 `/api/execute` 内联路径。后端几乎零改动,作者信任增益最高 |
+| ✅3 | **UI 内"试运行"(dry-run)** —— **已做** | M | 小白在走上传+审核链路前,先看插件真调 API、产出真值——杀死"生成黑盒→盲传→等审→发现错了"的循环 | 已落地(零后端改动):`web/shortcut.html` 字段捷径结果区新增「试运行」面板——按 formItems 生成样例输入框 + 凭证框,POST `{dsl,inputs,auth}` 到现成的 `/api/execute`(SSRF 守卫),展示真实映射输出(写回单元格的值);execute-runner 未配时友好提示 |
 | 4 | **人话化失败解释** | S | 小白撞上 TS 编译栈直接放弃;友好、可行动的提示留住人、降工单 | Verifier 已把 `build:field` 编译错回喂修复循环;最终失败时给这些错加一层翻译(TS2554「缺参」→「这个捷径需要你没提到的一个输入」)。最低成本广覆盖 |
 
 ## 第二梯队
