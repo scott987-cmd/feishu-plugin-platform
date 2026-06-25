@@ -2,8 +2,8 @@
 
 # 能力路线图:飞书插件生态 × 我们的容器/DSL 平台覆盖度
 
-> 产出方式:6 路并行 Web 调研飞书插件生态 → 按本平台「预审容器 + 只读数据 DSL」模型分级 → 对抗式复核定稿(2026-06-22)。
-> 去重后约 **30 类**:🟢 5 / 🟡 15 / 🔴 12。
+> 产出方式:6 路并行 Web 调研飞书插件生态 → 按本平台「预审容器 + 只读数据 DSL」模型分级 → 对抗式复核定稿(2026-06-22;黄区落地进度更新 2026-06-25)。
+> 去重后约 **30 类**:🟢 5 / 🟡 15 / 🔴 12(其中黄区多项已落地——容器解释器两层抽象、明细表+真 filter、gauge、markdown、pivot、timeline、kanban/calendar/gallery、countdown 渲染器均已在 `plugin/block/src/App.tsx` 的 `renderers` 注册表上线;仍黄=tree / map / 记录视图 / 高级图表族 / automation-lite)。
 
 ## 0. 核心原理(边界从哪来)
 
@@ -32,19 +32,21 @@
 
 ## 🟡 黄区:容器可做,但需新积木 / 第二容器(成本 S→L 递增)
 
+> 进度(2026-06-25 复核 `plugin/block/src`):标 ✅ 的格已上线——两层抽象(`ops.ts` 算子注册表 + `App.tsx` 的 `renderers` 注册表)+ 真 filter(`filter.ts` `applyFilter` 谓词)已落地,gauge/markdown/pivot/timeline/kanban/calendar/gallery/countdown 渲染器均已注册。仍黄=tree / map / 记录视图 / 高级图表族 / automation-lite。
+
 | 类型 | 要加的 DSL 积木 | 量 | 备注 |
 |---|---|---|---|
-| **容器解释器/渲染层(地基)** | 「聚合算子 + 渲染器」两层(register 模式);跨表只读数据访问层 | M | **真正的资产**。加图表=注册渲染器,加统计=注册算子,只审解释器本体一次。stat/chart/text 已真机跑通,缺显式抽象 |
-| **明细表(选列+筛选)** | table 渲染器;**真正实现 filter 算子**(当前是「过滤未执行」占位 stub);行级只读(注意批量读 ≤200) | M | **阻塞多项的前置:先把 filter 做成真算子**,否则一切「筛选后展示」是空头支票 |
-| 进度图 / 目标达成(gauge) | gauge/progress 渲染器(current + target) | S | 逻辑简单,仅因需新渲染器列黄 |
-| 单元格 Markdown/长文本预览 | markdown 渲染器 + **DOMPurify 级强消毒**(禁 script/iframe/on*/javascript:) | M | **安全红线格**:消毒层有洞 = 零审核前提失效 |
-| 透视表 / 透视图 | pivot 积木(两分组字段 + 一聚合)+ 二维分组 | M | 纯聚合,无新原子算子 |
+| ✅ **容器解释器/渲染层(地基)** | 「聚合算子 + 渲染器」两层(register 模式);跨表只读数据访问层 | M | **真正的资产,已落地**。`ops.ts` 是算子注册表(`aggregators` 表,加统计=注册一个函数)、`App.tsx` 的 `renderers` 是渲染器注册表(加图表=注册一个渲染器),容器解释器本体只审一次 |
+| ✅ **明细表(选列+筛选)** | table 渲染器;**真正实现 filter 算子**;行级只读(注意批量读 ≤200) | M | **已落地**:`filter.ts` `applyFilter` 是真谓词(手写 parser,绝不 eval;支持 `= != > >= < <= contains in` + `AND/OR` + month/year/day + THIS_MONTH/THIS_YEAR/TODAY 宏;解析失败=不过滤+琥珀告警)。table 渲染器已注册并接 filter |
+| ✅ 进度图 / 目标达成(gauge) | gauge/progress 渲染器(current + target) | S | **已落地**:`GaugeTile` 已注册(value=字段聚合,target=目标常量,画进度环) |
+| ✅ 单元格 Markdown/长文本预览 | markdown 渲染器 + **强消毒** | M | **已落地**:`Markdown` 渲染器解析为 React 元素、**绝不 innerHTML/dangerouslySetInnerHTML**(数据通道 XSS 防线),已闭掉本格安全红线 |
+| ✅ 透视表 / 透视图 | pivot 积木(两分组字段 + 一聚合)+ 二维分组 | M | **已落地**:`pivot`(ops.ts 二维交叉聚合)+ `PivotTile` 已注册,纯聚合无新原子算子 |
 | 高级图表族(漏斗/雷达/散点/桑基/瀑布/直方/箱线/词云/热力) | chart.type 枚举扩展 + 新算子(cumsum/quantile/分桶/流向/词频) | L | 先上纯聚合的(漏斗/雷达/散点),需新算子的放后 |
-| 时间轴 / 时间线 | timeline 渲染器(日期+事件,只读铺排) | S | 接近绿区 |
-| 层级 / 树形 | tree 渲染器(parent/双向关联→构树) | M | 只读展示,受控折叠 OK |
-| 只读原生视图镜像(看板/日历/画册) | 只读 kanban / calendar / gallery 渲染器 | L | **明确「只读呈现」,绝不承诺拖拽写回**(写回即跌红区) |
+| ✅ 时间轴 / 时间线 | timeline 渲染器(日期+事件,只读铺排) | S | **已落地**:`TimelineTile` 已注册(按日期字段排序铺排) |
+| 层级 / 树形 | tree 渲染器(parent/双向关联→构树) | M | 只读展示,受控折叠 OK(尚未注册渲染器) |
+| ✅ 只读原生视图镜像(看板/日历/画册) | 只读 kanban / calendar / gallery 渲染器 | L | **已落地**:`KanbanTile`/`CalendarTile`/`GalleryTile` 三个只读渲染器均已注册——**明确「只读呈现」,绝不承诺拖拽写回**(写回即跌红区) |
 | 记录视图扩展(单记录排版/卡片/打印) | record-layout DSL + 只读 active record + 浏览器原生 print | M | **需第二个已审容器**(记录视图位 blockTypeID);建议 v2 |
-| 倒计时 | countdown 渲染器 + 解释器内置受控 tick | S | 动态由解释器提供,非用户 JS |
+| ✅ 倒计时 | countdown 渲染器 + 解释器内置受控 tick | S | **已落地**:`CountdownTile` 已注册,每秒受控 tick 由解释器提供,非用户 JS |
 | **地图视图** | map 渲染器 + 地图商域名固定进已审白名单 + key 后端持有 + 地理编码后端预处理 | L | **黄区最危险一格**:唯一需出网三方。允许用户自填地图源/key 即跌红区 |
 | **模板化轻自动化**(定时/阈值→发卡片/写一条记录) | automation-lite DSL + 平台后端调度器 + 平台机器人身份 | L | **含写入,越过纯只读边界**:写入只能后端用平台凭证、动作集白名单可枚举;否则转红区。与官方「应用模式」正面交锋 |
 
@@ -72,9 +74,9 @@
 ## 战略要点
 
 1. **护城河 = 只审一次的容器 + 纯数据 DSL**;靠死守上面三条红线维持。任何让用户自填 API/key/代码的功能(哪怕一处)都击穿前提——宁可放红区导出。
-2. **第一版死守「只读数据看板」**:绿区 + 低成本黄区(filter/table/进度/时间轴/透视)能吃掉飞书「仪表盘 + 只读可视化」几乎全部需求。
-3. **最高优先工程项 = 把 filter 从「未执行徽标」做成真算子**——它阻塞明细表/筛选看板等多项。
-4. **把容器抽象成两层(聚合算子 + 渲染器)**:让黄区高级图表从「线性逐个加」变成「加积木、只审一次」。这是「绕过逐个审核」洞察的工程落地。
+2. **第一版死守「只读数据看板」**:绿区 + 低成本黄区(filter/table/进度/时间轴/透视——**均已落地**)能吃掉飞书「仪表盘 + 只读可视化」几乎全部需求。
+3. ~~**最高优先工程项 = 把 filter 从「未执行徽标」做成真算子**~~ → **已完成**:`filter.ts` `applyFilter` 已是真谓词(手写 parser、绝不 eval),明细表/筛选看板的前置已解锁。
+4. **把容器抽象成两层(聚合算子 + 渲染器)——已落地**(`ops.ts` 算子注册表 + `App.tsx` `renderers` 渲染器注册表):黄区高级图表从「线性逐个加」变成「加积木、只审一次」。这是「绕过逐个审核」洞察的工程落地。
 5. **两条产品线划清**:零审核容器产物(数据 DSL) vs 需审独立插件(代码),避免对用户过度承诺。
 6. **竞品 = 官方「应用模式 + AI 工作流」(2025-11 上线)**:「做完整业务系统」维度打不过。差异化 =(a)跨租户模板一键复用;(b)更轻、嵌任意 Base 视图位即用的只读看板;(c)把字段捷径/Coze 当出海口而非对手。
 
@@ -131,7 +133,7 @@
 - **容器模式**:容器只审一次,生成物是 DSL 数据。后端鉴权已做**能力分离**(客户端只内嵌只读 `PLATFORM_READ_TOKEN` / admin `PLATFORM_API_TOKEN` 管写删 / 会话),即便客户端 token 泄露也只能读。**遗留**:widget 在 Bitable webview 内尚非真·per-user 身份(需 webview-OAuth),强多租户/对外敏感场景仍建议走导出模式或补 per-user。
 
 **必补缺口**(否则不算企业级合规):
-1. ~~**发布审计流水账**~~ → **目录写删审计已做**:持久化 Bitable 账本 + `GET /api/audit`(admin、追加式、newest-first),见 [PRODUCTION](PRODUCTION.md) §11。**仍待**:出网账本(execute 逐次出网)+ bundle↔受审源码哈希比对(attestation),见下「企业增强路线」#2。
+1. ~~**发布审计流水账**~~ → **目录写删审计 + 出网账本均已做**:持久化 Bitable 账本 + `GET /api/audit`(admin、追加式、newest-first);出网账本(execute 逐次出网,`action=execute.egress`,记 host/method/outcome,SSRF/重定向拦截=error)已在 `execrt.fetch` 收口落地,见 [PRODUCTION](PRODUCTION.md) §11。**仍待**:bundle↔受审源码哈希比对(attestation),见下「企业增强路线」#2 收尾项。
 2. ~~**共享 token 升级**~~ → **已做**:能力分离鉴权落地(客户端只读 / admin 写删 / 会话),见 [PRODUCTION](PRODUCTION.md) §7「鉴权 / 安全」。
 
 > ⚠️ **须在目标控制台亲核**(事实核查低置信):① 飞书官方介绍页当前确认 GA 的扩展类型为**记录视图 / 数据表视图 / 自动化操作 + 字段捷径(server 能力)**;"连接器/仪表盘"作为官方插件类型未在官方页确认(或属路线图/旧版)。② 免审默认人数、私有化部署 OAuth2 行为网上常错,以私有化控制台为准。
@@ -148,7 +150,7 @@
 | # | 能力 | 量 | 它解决什么 | 怎么建(复用现成) |
 |---|------|----|-----------|------------------|
 | ✅1 | **持久化审计账本 + 只读查看器** —— **已做** | M | 把现在的 `AUDIT` stdout 行(重启即丢)变成可筛选、抗篡改的 who/when/what/which-version 痕迹——正是上文「必补缺口 #1」 | 已落地:`BitableAuditStore`(复刻 BitablePluginStore 模式,追加式)+ `server.go` 写删改走 `recordAudit`(stdout + 持久化)+ `GET /api/audit`(admin、newest-first)+ `bitable-bootstrap` 建 `audit_log` 表 + `FEISHU_AUDIT_TABLE_ID` 旋钮。见 PRODUCTION §11 |
-| ✅2 | **execute-runtime 逐次出网账本** —— **已做** | M | 记录「哪个插件把哪行数据发给了哪个外部域名、为谁、放行/拦截」——信创安全团队要的 DLP 出网证据,坐实 README 已宣称的"出网集中审计" | 已落地:execrt `EgressRecorder` 接口在 `fetch` 收口逐跳记录(host/method/outcome,SSRF/重定向拦截=error)+ `WithPluginID` 归属;runner `egressRecorder` 把事件映射成 `execute.egress` 审计记录,**异步缓冲单 worker**写同一张审计表(热路径友好:满则丢并记数,绝不拖慢 execute)。见 PRODUCTION §11 |
+| ✅2 | **execute-runtime 逐次出网账本** —— **已做** | M | 记录「哪个插件把哪行数据发给了哪个外部域名、为谁、放行/拦截」——信创安全团队要的 DLP 出网证据,坐实 README 已宣称的"出网集中审计" | 已落地:execrt `EgressRecorder` 接口在 `fetch` 收口逐跳记录(host/method/outcome/step,SSRF/重定向拦截=error)+ `WithPluginID` 归属(归属 = api `/api/execute` 转发的平台 pluginId,回退 `fs.ID`);runner `egressRecorder` 把事件映射成 `execute.egress` 审计记录(actor=`plugin:<id>`),**异步缓冲单 worker**写同一张审计表(热路径友好:stdout 恒打 + 满则丢并记数,绝不拖慢 execute)。**优雅排空**:SIGTERM→HTTP 先排空→worker 把缓冲冲刷完再退(10s 上限),重启不丢已缓冲记录。runner 需 `FEISHU_APP_ID/SECRET/BITABLE_APP_TOKEN` + `FEISHU_AUDIT_TABLE_ID` 才持久化。测试见 `internal/execrt/egress_test.go`。见 PRODUCTION §11 |
 | ✅3 | **UI 内"试运行"(dry-run)** —— **已做** | M | 小白在走上传+审核链路前,先看插件真调 API、产出真值——杀死"生成黑盒→盲传→等审→发现错了"的循环 | 已落地(零后端改动):`web/shortcut.html` 字段捷径结果区新增「试运行」面板——按 formItems 生成样例输入框 + 凭证框,POST `{dsl,inputs,auth}` 到现成的 `/api/execute`(SSRF 守卫),展示真实映射输出(写回单元格的值);execute-runner 未配时友好提示 |
 | ✅4 | **人话化失败解释** —— **已做** | S | 小白撞上 TS 编译栈直接放弃;友好、可行动的提示留住人、降工单 | 已落地:`generator.Explain(err)→(hint,detail)` 把开发者级错误(TS2554 缺参 / 域名白名单不符 / 主列类型 / 必填缺失 / 模型/网络 / repair 耗尽)翻成人话 hint;repair loop 把最后一轮的具体原因带进耗尽错误(让 hint 更精准);三个 generate handler 回 `{error:hint, detail:raw}`;UI 显示 hint + 可折叠技术细节 |
 
@@ -169,3 +171,5 @@
 - **产物溯源清单 + 内容哈希(M)**:对上文 attestation 缺口有意义,但已被"可审计源码 + Created-by 溯源头"部分覆盖;高价值增量(bundle↔源码哈希对比)作为 #1 账本的一列搭车。
 
 > ✅ **第一梯队(#1–#4)已全部落地**(审计账本 / 出网账本 / dry-run / 人话化解释)——合规与作者体验两条线都坐实,全是薄复用、零新依赖。**第二梯队按客户实际诉求拉起。**
+
+> 🚀 **线上部署(2026-06-25 端到端验证)**:生产为单机 docker compose + Caddy 自动 TLS,跑在一台 AWS EC2 主机(Caddy 经 `<ip>.sslip.io` 魔法 DNS 签发 Let's Encrypt 证书,STORE=bitable);k8s(`deploy/k8s/`)是可选的未来横向扩展路径,非主线。概览页:https://scott987-cmd.github.io/feishu-plugin-platform/。

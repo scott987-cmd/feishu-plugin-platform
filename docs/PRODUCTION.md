@@ -6,17 +6,21 @@
 
 ## 1. 生产拓扑
 
+**生产实况(已端到端验证,2026-06-25)**:单节点 `docker compose` + **Caddy 自动 TLS** 跑在一台 AWS EC2 主机上(Caddy 经 `<IP>.sslip.io` 魔法 DNS 主机名向 Let's Encrypt 签发证书,免买域名);`STORE=bitable`。线上总览页:<https://scott987-cmd.github.io/feishu-plugin-platform/>。k8s(`deploy/k8s/`)是**可选的未来 / 扩容路径**(Phase4),不是主路径。
+
 ```
-飞书容器插件(已上架, 用户浏览器内) ──HTTPS(Bearer)──▶ Ingress(TLS)
-                                                          │
-                                              ┌───────────┴───────────┐
-                                              ▼                        ▼
-                                         api (Deployment×2)      generator (Deployment+HPA)
-                                              │  ▲                     │
-                              STORE=bitable ──┘  └── /api/generate ────┘
-                                              │                        │
-                                       飞书多维表格(存定义)        DeepSeek API
+飞书容器插件(已上架, 用户浏览器内) ──HTTPS(Bearer)──▶ Caddy(:443 自动 TLS, EC2)
+                                                          │  反代 api:8080
+                                              ┌───────────┴────────────────────┐
+                                              ▼                ▼               ▼
+                                         api (:8080)   generator (:8090)  execute-runner (:8095)
+                                              │  ▲ /api/generate    ▲ /api/execute
+                              STORE=bitable ──┘  └── DeepSeek API ───┘  (仅容器网络可见)
+                                              │
+                                       飞书多维表格(存定义 + 审计 / 出网账本)
 ```
+
+> generator(持 LLM key)与 execute-runner(出网收口)**仅容器网络可见、不对外暴露**,只由 api 经内网调用。prod compose 文件:`deploy/compose/docker-compose.prod.yml`;仓库根的 `docker-compose.yml` 仅本地 dev(`STORE=memory`、`CORS=*`)。
 
 ## 2. 上线前置
 
@@ -31,26 +35,45 @@
 | 变量 | 服务 | 生产值 |
 |---|---|---|
 | `STORE` | api | `bitable` |
+| `SERVE_WEB` | api | `false`(生产关掉 mock 渲染器) |
 | `FEISHU_APP_ID/SECRET` | api | 真实凭证(Secret) |
 | `FEISHU_BITABLE_APP_TOKEN/TABLE_ID` | api | bootstrap 输出 |
-| `PLATFORM_API_TOKEN` | api | 32 字节随机串(Secret) |
-| `ALLOWED_ORIGIN` | api | 你的飞书 origin(非 `*`) |
+| `FEISHU_AUDIT_TABLE_ID` | api / execute-runner | bootstrap 输出(留空=仅 stdout 审计) |
+| `PLATFORM_API_TOKEN` | api | 32 字节随机串、admin/写、仅服务端(Secret)。**必填**(compose `${VAR:?}`) |
+| `PLATFORM_READ_TOKEN` | api | 32 字节随机串、只读、内嵌进 widget bundle;**须与 admin 不同**。**必填** |
+| `GENERATOR_TOKEN` | api + generator | api↔generator 共享强随机 token。**必填** |
+| `EXECUTE_RUNNER_URL` | api | `http://execute-runner:8095`(内网 runner) |
+| `EXECUTE_RUNNER_TOKEN` | api + execute-runner | api↔runner 共享强随机 token。**必填** |
+| `ALLOWED_ORIGIN` | api | 你的飞书 origin(**非 `*`**,见 §4) |
 | `GENERATE_RPM` | api | 如 `60`(限流护 LLM 预算) |
+| `AI_ENABLED` | generator | `true`(`false`=彻底关 NL→LLM,提示词永不出域) |
 | `DEEPSEEK_API_KEY` | generator | 真实 key(Secret) |
+| `DEEPSEEK_BASE_URL` | generator | 留空=DeepSeek 公网;钉到自托管/境内 OpenAI 兼容端点则提示词不出域 |
 | `LLM_PROVIDER` / `MODEL` | generator | `deepseek` / `deepseek-chat` |
+
+> `GENERATOR_TOKEN` / `EXECUTE_RUNNER_TOKEN` / `PLATFORM_READ_TOKEN` 在 prod compose 里是 `${VAR:?}` **必填**——旧的 `.env` 缺这几项会让 `docker compose` 插值直接报 `required variable … is missing a value` 而起不来(见 §4「升级既有部署」)。
 
 ## 4. 安全清单
 
-- [x] **API 鉴权**:`PLATFORM_API_TOKEN` 设置后,`/api/*` 强制 `Authorization: Bearer`(常数时间比较);未设置会启动告警。
-- [x] **CORS** 收敛到指定 origin(`ALLOWED_ORIGIN`,默认 `*` 仅 dev,会告警)。
-- [x] **限流**:`/api/generate` 固定窗口 RPM 上限 → 429。
-- [x] **TLS**:Ingress `tls` + `ssl-redirect`(cert-manager)。
-- [x] **容器加固**:只读根 FS、drop ALL caps、seccomp、nonroot uid;命名空间 PSA `restricted`。
-- [x] **网络隔离**:NetworkPolicy 默认拒绝,仅放行 api→generator、ingress→api(需 Calico/Cilium)。
-- [x] **密钥**:`Secret`(生产建议外接 sealed-secrets / external-secrets);`.env.local` 已被 `.gitignore` 忽略。
-- [ ] **用户级鉴权(升级项)**:当前为共享 token(企业内部自用足够)。如需按飞书用户鉴权,在插件侧用 JSAPI ticket、后端校验用户身份——见 §7。
+- [x] **API 鉴权(能力分离)**:客户端 bundle 只内嵌**只读 token `PLATFORM_READ_TOKEN`**(仅 `GET /api/apps*` + `POST /api/execute`);**写 / 删 / 生成**(`POST`、`DELETE /api/apps`、`/api/generate`)需服务端持有的 **admin token `PLATFORM_API_TOKEN`** 或登录会话;`/api/me`、`/api/my/*` 仅会话;`GET /api/audit` 仅 admin。常数时间比较;`path.Clean` 守 `//api` 绕过。即便客户端 token 泄露也只能读(IDOR 已消除)。
+- [x] **CORS** 收敛到指定 origin(`ALLOWED_ORIGIN`)。**开了鉴权时 `ALLOWED_ORIGIN=*` 会被拒绝启动**(`cmd/api/main.go` `log.Fatal`,凭证 + 通配 CORS 危险)——必须设具体 origin,或设 `ALLOWED_ORIGIN_INSECURE=true` 显式放开(仅 dev/首跑)。
+- [x] **限流**:`/api/generate` 固定窗口 RPM 上限 → 429。execute-runner 另有 `EXECUTE_MAX_CONCURRENCY`(默认 64)并发闸,过载吐 429 + Retry-After。
+- [x] **TLS(生产实况)**:Caddy 自动 TLS——经 `<IP>.sslip.io` 主机名向 Let's Encrypt 签发 / 续期,`80→443` 跳转。*(k8s 路径走 Ingress `tls` + `ssl-redirect` + cert-manager。)*
+- [x] **容器加固**(k8s 路径):只读根 FS、drop ALL caps、seccomp、nonroot uid;命名空间 PSA `restricted`。
+- [x] **网络隔离**:compose 生产里 generator / execute-runner 仅 `expose`(容器网络可见、不发布端口),只由 api 内网调用。*(k8s 路径用 NetworkPolicy 默认拒绝,仅放行 api→generator/runner、ingress→api,需 Calico/Cilium。)*
+- [x] **密钥**:`Secret`(k8s 生产建议外接 sealed-secrets / external-secrets);compose 路径走主机 `deploy/compose/.env`;`.env*` 已被 `.gitignore` 忽略。
+- [ ] **用户级鉴权(升级项)**:容器 widget 在 Bitable webview 内无我方会话、拿的是降权只读 token,尚非真·per-user 身份。真 per-user 需飞书 webview-OAuth——见 §8。
 
-## 5. 部署(k8s)
+**升级既有部署(真实坑)** —— 把一台旧 EC2 上跑的 compose 升到当前版本时,逐项核对:
+
+- (a) **必填 token**:`GENERATOR_TOKEN`、`EXECUTE_RUNNER_TOKEN`、`PLATFORM_READ_TOKEN` 现在是 compose `${VAR:?}` 必填;旧 `.env` 缺它们会让 `docker compose` 插值直接失败(`required variable … is missing a value`)。先在 `deploy/compose/.env` 补齐(`openssl rand -hex 32`),且 `PLATFORM_READ_TOKEN` 必须与 `PLATFORM_API_TOKEN` 不同。
+- (b) **CORS 致命门**:开了鉴权又把 `ALLOWED_ORIGIN` 留成 `*`,api **拒绝启动**(不是告警)。设具体 origin,或临时 `ALLOWED_ORIGIN_INSECURE=true`。
+- (c) **发版脚本的 admin token**:`scripts/deploy.env` 的 `PLATFORM_API_TOKEN` 刻意留空——`publish-plugin.sh` / `backup-defs.sh` 会经 SSH 从服务器 `deploy/compose/.env` 读 admin token,别在本地填它。
+- (d) **免买域名**:`sslip.io` 魔法 DNS(`<IP>.sslip.io`)让 Caddy 不买域名也能签真 TLS——飞书 webview 要求合法 TLS 域名,这是最省事的路子。
+
+## 5. 部署(k8s,可选扩容路径)
+
+> 生产实况是 §1 的单节点 compose + Caddy(`deploy/compose/docker-compose.prod.yml`,用法见 `deploy/compose/DEPLOY.md`)。下面的 k8s 是**可选的扩容 / 未来路径**(Phase4)。
 
 ```bash
 # 1. 改 deploy/k8s/00-namespace-config.yaml 的 ConfigMap/Secret 占位值
@@ -86,7 +109,7 @@ opdev upload ./dist
 
 ## 7. 运维
 
-- **伸缩**:generator 有 HPA(CPU 70%,1–5 副本);api 2 副本起。
+- **伸缩**(k8s 路径):generator 有 HPA(CPU 70%,1–5 副本);api 2 副本起。单节点 compose 为单副本。
 - **优雅停机**:两服务监听 SIGTERM,排空 10s(k8s 滚动更新友好)。
 - **可观测**:请求日志(method/path/status/耗时)输出到 stdout,接你的日志栈;LLM 失败/余额耗尽会单独 log(呼应"分数降先查 LLM 余额")。
 - **LLM 预算**:`GENERATE_RPM` 是第一道闸;余额耗尽时生成自动回退关键词路由(不中断服务)。
@@ -116,7 +139,7 @@ opdev upload ./dist
 
 部署:
 - 镜像用可变 tag + `IfNotPresent`:重推同名 tag 不会重新拉取。生产请按 digest 固定(`@sha256:...`)或每次 bump 版本;`make images` 的 `REGISTRY` 需与 `deploy/k8s/{10,20}-*.yaml` 的 image 前缀手动对齐(无 kustomize 模板)。
-- `docker compose` 仅供本地 dev(无 healthcheck 门禁,默认 STORE=memory、CORS=*);生产走 k8s。
+- **生产 = 单节点 `docker compose` + Caddy 自动 TLS 跑在 EC2(已端到端验证)**;prod compose 是 `deploy/compose/docker-compose.prod.yml`。**仓库根的 `docker-compose.yml` 仅本地 dev**(默认 `STORE=memory`、`CORS=*`、无 healthcheck 门禁)。k8s(`deploy/k8s/`)是可选的扩容/未来路径。
 - 前端构建需联网(npm),不在 `go test ./...` 覆盖内;建议 CI 加 `npm ci && npm run typecheck`。
 
 ## 9. AI 数据出域(合规)

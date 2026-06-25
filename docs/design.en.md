@@ -2,6 +2,8 @@
 
 # Feishu Bitable Plugin Generation Platform · Technical Design
 
+> ⚠️ **Parts of this document are superseded (an early design draft finalized 2026-06-20)**. It is kept for design background, but where it conflicts with the current system, **the code and current docs win**: `README.md`, `docs/PRODUCTION.md`, `docs/EXECUTE_RUNTIME.md`. Known major deviations (fixed inline below): **the renderer actually uses `@lark-opdev/block-bitable-api` (NOT `@lark-base-open/js-sdk`)**; **the primary shipped output is basekit field shortcuts (addField) + automation actions (addAction), and the container/view-extension is a read-only render host, not the only product**; **the live deployment is docker compose + Caddy auto-TLS on EC2 (k8s = optional future scale-out path)**; **the LLM default is DeepSeek (can switch to Claude)**; auth is **capability-split** (read-only client token / server-only admin token), and both an **audit ledger** and an **egress ledger** have shipped.
+
 > **One-line positioning**: A platform that lets non-technical users "generate with one click, deploy with one click" Feishu Bitable plugins.
 >
 > **Settled architecture decisions**: Hybrid architecture (container-first + exportable) · Internal enterprise use (single-tenant) · Template forms + AI natural language dual generation · Backend services deployed on Kubernetes (the Feishu frontend container plugin is not inside k8s).
@@ -108,8 +110,10 @@ A single declarative JSON drives both "container rendering" and "export compilat
 
 ## 5. Container Plugin + Runtime Engine (the Vehicle for "One-Click Use")
 
+> 📌 **Current-state correction**: the actual **primary output** is basekit **field shortcuts (addField) + automation actions (addAction)**; the container / view extension here is a **read-only render host**, not the only product. It does **not** generate Feishu sidebar plugins or 数据连接器 (data connectors).
+
 - A standard Feishu **data-table view plugin** (React + TS + Webpack, the official stack), **published once** within the company's Feishu.
-- A built-in **universal rendering engine**: reads the DSL → renders the UI with a pre-built component library; data access uniformly goes through `@lark-base-open/js-sdk` (running in the host context, **automatically inheriting the user's permissions on the current Base, no extra authorization needed**; batch writes ≤ 200 per call).
+- A built-in **universal rendering engine**: reads the DSL → renders the UI with a pre-built component library; data access uniformly goes through `@lark-opdev/block-bitable-api` (running in the host context, **automatically inheriting the user's permissions on the current Base, no extra authorization needed**; batch writes ≤ 200 per call).
 - Logic is split into two tiers: **declarative actions** (filter / aggregate / export / notify…) cover the vast majority; the long tail uses a **sandbox** (QuickJS or Web Worker + capability allowlist) to run AI-generated code snippets, preventing privilege escalation.
 
 > ⚠️ **Design discipline**: The engine must be "definition-driven" rather than "code-driven" — new capabilities should as far as possible come from extending the DSL/components, not from changing the container code. This keeps "container re-release review" to the lowest possible frequency.
@@ -121,6 +125,8 @@ A single declarative JSON drives both "container rendering" and "export compilat
 - **Definition storage**: Direct dogfooding is recommended — use **one Bitable table** to store all application definitions (owner, bound table, definition JSON, version). It naturally comes with Feishu-native permissions/sharing, saving a separate database and admin backend.
 - **LLM orchestration**: Planning → template matching → parameter filling → schema validation → **auto-repair loop** (on validation failure, feed back to the LLM to retry) → preview. The API key stays on the backend and is not exposed to the frontend.
 - **Compiler/exporter**: DSL → inject into the `opdev create` scaffold → package as a zip.
+
+> 📌 **Current-state correction (auth + audit shipped)**: auth is **capability-split** — the client bundle embeds only a read-only token (reads `/api/apps*` + `POST /api/execute`), while write/delete/generate go through a server-only admin token, so a leaked client token can only read. An **audit ledger** (`GET /api/audit`, admin-only, append-only dedicated table) and an **egress ledger** (every outbound call records `execute.egress`; SSRF/redirect blocks recorded as errors; graceful drain) have shipped. See `docs/PRODUCTION.md` / `docs/EXECUTE_RUNTIME.md`.
 
 ### 6.1 Kubernetes Deployment (Backend Services on k8s)
 
@@ -184,11 +190,11 @@ flowchart LR
 
 ## 9. Tech Stack Choices (Aligned with Existing Capabilities)
 
-- Container/frontend: React + TS + Webpack + `@lark-base-open/js-sdk`.
+- Container/frontend: React + TS + Webpack + `@lark-opdev/block-bitable-api`.
 - Backend: **Go** (substantial existing experience with Feishu Go projects) for the LLM proxy + compile & export; storage uses Bitable (Postgres can be layered on).
-- LLM: **Claude** (planning + controlled generation, strongly constrained JSON output).
+- LLM: **DeepSeek by default** (can switch to Claude; planning + controlled generation, strongly constrained JSON output).
 - Sandbox: `quickjs-emscripten` or Web Worker + capability allowlist (when moving to server-side isolation in Phase 4, can migrate to one k8s pod per app).
-- **Deployment: Kubernetes** (backend services) + Docker images + Ingress (TLS); one-off builds use a k8s `Job`; secrets/config use `Secret` / `ConfigMap`; single-tenant scale can downgrade to `k3s` / `docker-compose`.
+- **Deployment (current)**: production runs **single-node docker compose + Caddy auto-TLS on an AWS EC2 host** (Let's Encrypt via an `<ip>.sslip.io` magic-DNS host; `STORE=bitable`); **k8s is the optional future scale-out path, NOT the primary**. Docker images + `Secret` / `ConfigMap` still apply; single-tenant scale need not go full k8s.
 - Can directly reuse the already-installed `lark-cli` / lark-* skills for table read/write and publishing ops.
 
 ---

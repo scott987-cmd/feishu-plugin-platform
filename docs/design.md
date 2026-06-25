@@ -2,6 +2,8 @@
 
 # 飞书多维表格插件生成平台 · 技术方案
 
+> ⚠️ **部分内容已过时(成稿 2026-06-20 的早期设计稿)**。本文保留作设计背景,但若与现状冲突,**以代码与现行文档为准**:`README.md`、`docs/PRODUCTION.md`、`docs/EXECUTE_RUNTIME.md`。已知主要偏差(下文已就地修正):**渲染器实际用 `@lark-opdev/block-bitable-api`(非 `@lark-base-open/js-sdk`)**;**主力产出是 basekit 字段捷径(addField)+ 自动化动作(addAction),容器/视图扩展是只读渲染宿主而非唯一产品**;**线上部署是 EC2 上的 docker compose + Caddy 自动 TLS(k8s 为可选的未来横向扩展路径)**;**LLM 默认 DeepSeek(可切 Claude)**;鉴权已做**能力分离**(客户端只读 token / admin 服务端 token),并已落地**审计 ledger** 与**出站(egress) ledger**。
+
 > **一句话定位**:让小白「一键生成、一键部署」飞书多维表格(Bitable)插件的平台。
 >
 > **已定架构决策**:混合架构(容器为主 + 可导出) · 企业内部自用(单租户) · 模板表单 + AI 自然语言 双生成 · 后端服务 Kubernetes 部署(飞书前端容器插件不在 k8s 内)。
@@ -108,8 +110,10 @@ flowchart TD
 
 ## 五、容器插件 + 运行时引擎(「一键用」的载体)
 
+> 📌 **现状校正**:实际**主力产出**是 basekit **字段捷径(addField)+ 自动化动作(addAction)**;此处的容器 / 视图扩展是**只读渲染宿主**,并非唯一产品。**不**生成飞书侧边栏插件或数据连接器。
+
 - 一个标准的飞书**数据表视图插件**(React + TS + Webpack,官方栈),公司飞书内**发布一次**。
-- 内置**通用渲染引擎**:读 DSL → 用预置组件库渲染 UI;数据访问统一走 `@lark-base-open/js-sdk`(运行在宿主上下文,**自动继承用户对当前 Base 的权限,无需额外授权**;写入批量 ≤ 200/次)。
+- 内置**通用渲染引擎**:读 DSL → 用预置组件库渲染 UI;数据访问统一走 `@lark-opdev/block-bitable-api`(运行在宿主上下文,**自动继承用户对当前 Base 的权限,无需额外授权**;写入批量 ≤ 200/次)。
 - 逻辑分两档:**声明式动作**(filter / aggregate / export / notify…)覆盖绝大多数;长尾用**沙箱**(QuickJS 或 Web Worker + 能力白名单)跑 AI 生成的代码片段,防越权。
 
 > ⚠️ **设计纪律**:引擎要「定义驱动」而非「代码驱动」——新增能力尽量靠扩 DSL/组件,而不是改容器代码。这样能把「容器重新发版审核」压到最低频。
@@ -121,6 +125,8 @@ flowchart TD
 - **定义存储**:推荐直接 dogfooding —— 用**一张多维表格**存所有应用定义(owner、绑定表、定义 JSON、版本)。天然有飞书原生权限/分享,省一套数据库和后台。
 - **LLM 编排**:规划 → 模板匹配 → 参数填充 → schema 校验 → **自动修复环**(校验失败回灌 LLM 重试)→ 预览。API key 放后端不暴露给前端。
 - **编译/导出器**:DSL → 注入 `opdev create` 脚手架 → 打包 zip。
+
+> 📌 **现状校正(鉴权 + 审计已落地)**:鉴权已做**能力分离**——客户端 bundle 只内嵌只读 token(读 `/api/apps*` + `POST /api/execute`),写/删/生成走服务端 admin token,泄露的客户端 token 只能读。已上线**审计 ledger**(`GET /api/audit`,管理员、追加写专表)与**出站 egress ledger**(每次外呼记录 `execute.egress`、SSRF/重定向拦截记 error,优雅排空)。详见 `docs/PRODUCTION.md` / `docs/EXECUTE_RUNTIME.md`。
 
 ### 6.1 Kubernetes 部署(后端服务上 k8s)
 
@@ -184,11 +190,11 @@ flowchart LR
 
 ## 九、技术栈选型(贴合现有能力)
 
-- 容器/前端:React + TS + Webpack + `@lark-base-open/js-sdk`。
+- 容器/前端:React + TS + Webpack + `@lark-opdev/block-bitable-api`。
 - 后端:**Go**(已有大量飞书 Go 项目积累)做 LLM 代理 + 编译导出;存储用多维表格(也可叠 Postgres)。
-- LLM:**Claude**(规划 + 受控生成,强约束 JSON 输出)。
+- LLM:**默认 DeepSeek**(可切 Claude;规划 + 受控生成,强约束 JSON 输出)。
 - 沙箱:`quickjs-emscripten` 或 Web Worker + 能力白名单(Phase 4 服务端隔离时可迁为每应用一 k8s pod)。
-- **部署:Kubernetes**(后端服务)+ Docker 镜像 + Ingress(TLS);一次性构建用 k8s `Job`;密钥/配置用 `Secret` / `ConfigMap`;单租户体量可降级 `k3s` / `docker-compose`。
+- **部署(现状)**:线上是 **EC2 上的单节点 docker compose + Caddy 自动 TLS**(Let's Encrypt,经 `<ip>.sslip.io` 魔法 DNS;`STORE=bitable`);**k8s 为可选的未来横向扩展路径,非主路**。Docker 镜像 + `Secret` / `ConfigMap` 仍适用;单租型不必上完整 k8s。
 - 可直接复用已装的 `lark-cli` / lark-* skills 做表格读写与发布运维。
 
 ---

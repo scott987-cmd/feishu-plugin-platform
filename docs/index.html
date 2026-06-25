@@ -464,7 +464,7 @@ $ <b>scripts/release.sh</b> "城市天气字段捷径"
 <span style="color:#7fd1b9">═══ ① 部署后端 ═══</span>   api · generator · execute-runner · caddy  →  滚动重启 + 健康检查 ✓
 <span style="color:#7fd1b9">═══ ② 发版 widget ═══</span> 注入后端地址 → webpack 构建 → opdev 上传新版本 ✓
 <span style="color:#5d7066"># 末步:控制台「选版本 + 发应用版本」(免审租户即时;可进一步 API 全自动)</span></pre>
-      <p class="section-lead" style="margin-top:.8rem;font-size:.95rem">脚本与完整手册见仓库 <code>scripts/</code> 与 <a href="https://github.com/scott987-cmd/feishu-plugin-platform/blob/main/OPERATIONS.md" style="color:var(--brand)">OPERATIONS.md</a>;部署细节见 <code>deploy/compose/DEPLOY.md</code> 与 <code>deploy/k8s/</code>。</p>
+      <p class="section-lead" style="margin-top:.8rem;font-size:.95rem">已端到端部署上线:生产为单机 docker compose + Caddy 自动 TLS(经 <code>&lt;ip&gt;.sslip.io</code> 魔法 DNS 由 Let's Encrypt 签发,<code>STORE=bitable</code>)跑在一台 AWS EC2 上;<code>k8s</code> 为可选的横向扩展路径。脚本与完整手册见仓库 <code>scripts/</code> 与 <a href="https://github.com/scott987-cmd/feishu-plugin-platform/blob/main/OPERATIONS.md" style="color:var(--brand)">OPERATIONS.md</a>;部署细节见 <code>deploy/compose/DEPLOY.md</code> 与 <code>deploy/k8s/</code>。</p>
     </div>
   </div>
 </section>
@@ -543,7 +543,7 @@ $ <b>scripts/release.sh</b> "城市天气字段捷径"
             <p>"输入城市名，调天气 API，返回温度和天气状况，供后续『发送通知』步骤使用。"</p>
           </div>
           <ul class="produces">
-            <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>鉴权：<code style="font-family:var(--mono);font-size:12px;color:var(--brand)">APIKey</code>，支持 GET/POST + body</span></li>
+            <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>鉴权：<code style="font-family:var(--mono);font-size:12px;color:var(--brand)">APIKey / OAuth2</code>，支持 GET/POST + body</span></li>
             <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>结构化返回对象，可被下游自动化节点直接引用</span></li>
             <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>已端到端验证</b>：上传 → 发布 → 在真飞书 Base 安装启用 ✓</span></li>
           </ul>
@@ -576,8 +576,8 @@ $ <b>scripts/release.sh</b> "城市天气字段捷径"
         <p>GET/POST/PUT/PATCH/DELETE + 自定义请求头 + 嵌套 body；<b>多步链式</b>——后一步用前一步的响应（如「取 token → 带 token 调 API」）。</p>
       </div>
       <div class="ac-card">
-        <h3>连接器：写回 Base 记录</h3>
-        <p>自动化动作调飞书 OpenAPI（取 token → <code>batch_create</code>）把数据写成多维表格记录——已真机写入一条并读回确认。</p>
+        <h3>自动化写回多维表格记录</h3>
+        <p>自动化动作调飞书 OpenAPI（取 token → <code>batch_create</code>）把数据写成多维表格记录——已真机写入一条并读回确认。<b>不生成数据连接器</b>。</p>
       </div>
       <div class="ac-card">
         <h3>13 种结果列类型</h3>
@@ -731,6 +731,12 @@ $ <b>scripts/release.sh</b> "城市天气字段捷径"
         <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1.5 1.5M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg></div>
         <h3>URL 占位符校验</h3>
         <p>URL 模板中的占位符与字段、鉴权参数严格对应；非法或悬空占位符在生成期即被拦下。</p>
+      </div>
+      <div class="sec-card">
+        <span class="badge">04</span>
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg></div>
+        <h3>出网 + 操作审计账本</h3>
+        <p>每一次出网调用都向专用的 <code>audit_log</code> 多维表格写入一条只追加（append-only）的 <code>execute.egress</code> 审计事件（含 actor / 目标域名 / 方法 / 结果；SSRF / 重定向拦截记为 error）；管理员经 <code>GET /api/audit</code> 查询。热路径安全：始终落 stdout + 异步缓冲单 worker，关停时优雅排空不丢记录。</p>
       </div>
     </div>
     <div class="sec-banner">

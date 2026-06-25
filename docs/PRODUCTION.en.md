@@ -6,17 +6,21 @@ Take the platform to production grade. The backend (`api` + `generator`) is alre
 
 ## 1. Production Topology
 
+**Live production (verified end-to-end 2026-06-25)**: a single-node `docker compose` + **Caddy auto-TLS** on an AWS EC2 host (Caddy issues/renews Let's Encrypt certs via an `<IP>.sslip.io` magic-DNS hostname — no domain to buy); `STORE=bitable`. Live overview page: <https://scott987-cmd.github.io/feishu-plugin-platform/>. k8s (`deploy/k8s/`) is the **optional future / scale-out path** (Phase4), not the primary one.
+
 ```
-Feishu container plugin (published, in user's browser) ──HTTPS(Bearer)──▶ Ingress(TLS)
-                                                          │
-                                              ┌───────────┴───────────┐
-                                              ▼                        ▼
-                                         api (Deployment×2)      generator (Deployment+HPA)
-                                              │  ▲                     │
-                              STORE=bitable ──┘  └── /api/generate ────┘
-                                              │                        │
-                                       Feishu Bitable (stores defs)   DeepSeek API
+Feishu container plugin (published, in user's browser) ──HTTPS(Bearer)──▶ Caddy (:443 auto-TLS, EC2)
+                                                          │  reverse-proxies api:8080
+                                              ┌───────────┴────────────────────┐
+                                              ▼                ▼               ▼
+                                         api (:8080)   generator (:8090)  execute-runner (:8095)
+                                              │  ▲ /api/generate    ▲ /api/execute
+                              STORE=bitable ──┘  └── DeepSeek API ───┘  (container-network only)
+                                              │
+                                       Feishu Bitable (stores defs + audit / egress ledger)
 ```
+
+> generator (holds the LLM key) and execute-runner (egress choke point) are **container-network-only, not exposed externally** — called by the api over the internal network. Prod compose file: `deploy/compose/docker-compose.prod.yml`; the repo-root `docker-compose.yml` is local-dev only (`STORE=memory`, `CORS=*`).
 
 ## 2. Pre-Launch Prerequisites
 
@@ -31,26 +35,45 @@ Feishu container plugin (published, in user's browser) ──HTTPS(Bearer)──
 | Variable | Service | Production Value |
 |---|---|---|
 | `STORE` | api | `bitable` |
+| `SERVE_WEB` | api | `false` (disable the mock renderer in prod) |
 | `FEISHU_APP_ID/SECRET` | api | real credentials (Secret) |
 | `FEISHU_BITABLE_APP_TOKEN/TABLE_ID` | api | bootstrap output |
-| `PLATFORM_API_TOKEN` | api | 32-byte random string (Secret) |
-| `ALLOWED_ORIGIN` | api | your Feishu origin (not `*`) |
+| `FEISHU_AUDIT_TABLE_ID` | api / execute-runner | bootstrap output (empty = stdout-only audit) |
+| `PLATFORM_API_TOKEN` | api | 32-byte random, admin/write, server-only (Secret). **Required** (compose `${VAR:?}`) |
+| `PLATFORM_READ_TOKEN` | api | 32-byte random, read-only, embedded in the widget bundle; **must differ from admin**. **Required** |
+| `GENERATOR_TOKEN` | api + generator | strong random token shared api↔generator. **Required** |
+| `EXECUTE_RUNNER_URL` | api | `http://execute-runner:8095` (internal runner) |
+| `EXECUTE_RUNNER_TOKEN` | api + execute-runner | strong random token shared api↔runner. **Required** |
+| `ALLOWED_ORIGIN` | api | your Feishu origin (**not `*`**, see §4) |
 | `GENERATE_RPM` | api | e.g. `60` (rate limit protects LLM budget) |
+| `AI_ENABLED` | generator | `true` (`false` = fully disable NL→LLM; prompts never egress) |
 | `DEEPSEEK_API_KEY` | generator | real key (Secret) |
+| `DEEPSEEK_BASE_URL` | generator | empty = public DeepSeek; pin to a self-hosted/in-region OpenAI-compatible endpoint to keep prompts in-boundary |
 | `LLM_PROVIDER` / `MODEL` | generator | `deepseek` / `deepseek-chat` |
+
+> `GENERATOR_TOKEN` / `EXECUTE_RUNNER_TOKEN` / `PLATFORM_READ_TOKEN` are `${VAR:?}` **required** in the prod compose — an old `.env` missing them makes `docker compose` interpolation fail outright with `required variable … is missing a value` (see §4 "Upgrading an existing deployment").
 
 ## 4. Security Checklist
 
-- [x] **API auth**: once `PLATFORM_API_TOKEN` is set, `/api/*` enforces `Authorization: Bearer` (constant-time comparison); a startup warning fires if it is not set.
-- [x] **CORS** narrowed to the specified origin (`ALLOWED_ORIGIN`; default `*` is dev-only and warns).
-- [x] **Rate limiting**: `/api/generate` has a fixed-window RPM cap → 429.
-- [x] **TLS**: Ingress `tls` + `ssl-redirect` (cert-manager).
-- [x] **Container hardening**: read-only root FS, drop ALL caps, seccomp, nonroot uid; namespace PSA `restricted`.
-- [x] **Network isolation**: NetworkPolicy default-deny, allowing only api→generator and ingress→api (requires Calico/Cilium).
-- [x] **Secrets**: `Secret` (for production, sealed-secrets / external-secrets is recommended); `.env.local` is already ignored by `.gitignore`.
-- [ ] **User-level auth (upgrade item)**: currently a shared token (sufficient for internal enterprise use). For per-Feishu-user auth, use a JSAPI ticket on the plugin side and validate user identity on the backend — see §7.
+- [x] **API auth (capability-split)**: the client bundle embeds only the **read-only token `PLATFORM_READ_TOKEN`** (`GET /api/apps*` + `POST /api/execute` only); **write / delete / generate** (`POST`, `DELETE /api/apps`, `/api/generate`) require the server-held **admin token `PLATFORM_API_TOKEN`** or a login session; `/api/me`, `/api/my/*` are session-only; `GET /api/audit` is admin-only. Constant-time comparison; `path.Clean` guards `//api` evasion. Even if the client token leaks it can only read (IDOR eliminated).
+- [x] **CORS** narrowed to the specified origin (`ALLOWED_ORIGIN`). **With auth enabled, `ALLOWED_ORIGIN=*` REFUSES TO START** (`cmd/api/main.go` `log.Fatal` — credentials + wildcard CORS is unsafe) — set a specific origin, or set `ALLOWED_ORIGIN_INSECURE=true` to override explicitly (dev/first-run only).
+- [x] **Rate limiting**: `/api/generate` has a fixed-window RPM cap → 429. The execute-runner additionally has an `EXECUTE_MAX_CONCURRENCY` gate (default 64), shedding load with 429 + Retry-After.
+- [x] **TLS (live production)**: Caddy auto-TLS — issues/renews Let's Encrypt via an `<IP>.sslip.io` hostname, with `80→443` redirect. *(The k8s path uses Ingress `tls` + `ssl-redirect` + cert-manager.)*
+- [x] **Container hardening** (k8s path): read-only root FS, drop ALL caps, seccomp, nonroot uid; namespace PSA `restricted`.
+- [x] **Network isolation**: in the prod compose, generator / execute-runner are only `expose`d (container-network-visible, no published ports), called by the api over the internal network. *(The k8s path uses NetworkPolicy default-deny, allowing only api→generator/runner and ingress→api, requires Calico/Cilium.)*
+- [x] **Secrets**: `Secret` (for the k8s path, sealed-secrets / external-secrets is recommended); the compose path uses the host `deploy/compose/.env`; `.env*` is already ignored by `.gitignore`.
+- [ ] **User-level auth (upgrade item)**: the container widget has no platform session inside the Bitable webview and carries the downscoped read-only token, so it is not yet true per-user identity. True per-user needs Feishu webview-OAuth — see §8.
 
-## 5. Deployment (k8s)
+**Upgrading an existing deployment (real gotchas)** — when bumping a compose running on an old EC2 host to the current version, check each:
+
+- (a) **Required tokens**: `GENERATOR_TOKEN`, `EXECUTE_RUNNER_TOKEN`, `PLATFORM_READ_TOKEN` are now compose `${VAR:?}` required; an old `.env` missing them makes `docker compose` interpolation fail outright (`required variable … is missing a value`). Add them to `deploy/compose/.env` first (`openssl rand -hex 32`), and `PLATFORM_READ_TOKEN` must differ from `PLATFORM_API_TOKEN`.
+- (b) **CORS fatal gate**: with auth enabled and `ALLOWED_ORIGIN` left as `*`, the api **refuses to start** (not a warning). Set a specific origin, or temporarily `ALLOWED_ORIGIN_INSECURE=true`.
+- (c) **Publish-script admin token**: `scripts/deploy.env`'s `PLATFORM_API_TOKEN` is intentionally blank — `publish-plugin.sh` / `backup-defs.sh` read the admin token from the server's `deploy/compose/.env` over SSH; do not fill it locally.
+- (d) **No domain to buy**: `sslip.io` magic DNS (`<IP>.sslip.io`) lets Caddy issue real TLS without buying a domain — the Feishu webview requires a valid TLS domain, and this is the cheapest path.
+
+## 5. Deployment (k8s, optional scale-out path)
+
+> Live production is the single-node compose + Caddy from §1 (`deploy/compose/docker-compose.prod.yml`, usage in `deploy/compose/DEPLOY.md`). The k8s below is the **optional scale-out / future path** (Phase4).
 
 ```bash
 # 1. Edit the ConfigMap/Secret placeholder values in deploy/k8s/00-namespace-config.yaml
@@ -86,7 +109,7 @@ opdev upload ./dist
 
 ## 7. Operations
 
-- **Scaling**: generator has an HPA (CPU 70%, 1–5 replicas); api starts at 2 replicas.
+- **Scaling** (k8s path): generator has an HPA (CPU 70%, 1–5 replicas); api starts at 2 replicas. The single-node compose is single-replica.
 - **Graceful shutdown**: both services listen for SIGTERM and drain for 10s (friendly to k8s rolling updates).
 - **Observability**: request logs (method/path/status/latency) go to stdout, pipe into your logging stack; LLM failures / balance exhaustion are logged separately (echoing "when scores drop, check the LLM balance first").
 - **LLM budget**: `GENERATE_RPM` is the first gate; when the balance runs out, generation automatically falls back to keyword routing (without interrupting service).
@@ -116,7 +139,7 @@ Rendering / data:
 
 Deployment:
 - Images use a mutable tag + `IfNotPresent`: re-pushing the same tag name will not re-pull. For production, pin by digest (`@sha256:...`) or bump the version each time; the `REGISTRY` of `make images` must be manually aligned with the image prefix in `deploy/k8s/{10,20}-*.yaml` (no kustomize templating).
-- `docker compose` is for local dev only (no healthcheck gating; defaults to STORE=memory, CORS=*); production runs on k8s.
+- **Production = single-node `docker compose` + Caddy auto-TLS on EC2 (verified end-to-end)**; the prod compose is `deploy/compose/docker-compose.prod.yml`. **The repo-root `docker-compose.yml` is local-dev only** (defaults to STORE=memory, CORS=*, no healthcheck gating). k8s (`deploy/k8s/`) is the optional scale-out / future path.
 - The frontend build requires network access (npm) and is not covered by `go test ./...`; CI should add `npm ci && npm run typecheck`.
 
 ## 9. AI Data Egress (Compliance)

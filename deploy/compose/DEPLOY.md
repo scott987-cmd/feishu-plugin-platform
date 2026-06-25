@@ -7,6 +7,8 @@
 
 > 路线选择:单租户体量先用 compose;k8s 的收益(per-app 沙箱 pod 隔离)在 Phase4 才体现,
 > 见 `deploy/k8s/`。本目录就是 roadmap 里"先 compose"那一步。
+>
+> 参考部署:已在 AWS EC2 主机上端到端验证(`STORE=bitable`,Caddy 自动 TLS,2026-06-25)。
 
 ---
 
@@ -15,7 +17,7 @@
 | 项 | 说明 |
 |---|---|
 | 公网 Linux 服务器 | 1C2G 起步即可(Ubuntu/Debian 示例) |
-| 域名 | 一个 A 记录指向服务器公网 IP,如 `fpp.example.com → 1.2.3.4`。**webview 要求合法 TLS,所以必须用域名,纯 IP 不行** |
+| 域名 | 一个 A 记录指向服务器公网 IP,如 `fpp.example.com → 1.2.3.4`。**webview 要求合法 TLS,所以必须用域名,纯 IP 不行**。不想买域名:用 `<公网IP>.sslip.io` 这个魔法 DNS 主机名(自动解析回该 IP),Caddy 照样能签发真实 Let's Encrypt 证书 |
 | 防火墙/安全组 | 放行 `80`、`443`(80 用于 ACME 签证 + 跳转 HTTPS) |
 | 密钥 | DeepSeek key、飞书 App ID/Secret、多维表格 `app_token`/`table_id`(你本地 `.env.local` 里已有) |
 
@@ -34,7 +36,7 @@ cd feishu-plugin-platform/deploy/compose
 
 cp .env.prod.example .env
 # 编辑 .env,填:
-#   DOMAIN=你的域名
+#   DOMAIN=你的域名        # 没有域名可填 <公网IP>.sslip.io,Caddy 仍能签真实 TLS
 #   PLATFORM_API_TOKEN / PLATFORM_READ_TOKEN / EXECUTE_RUNNER_TOKEN / GENERATOR_TOKEN
 #                        # 各 $(openssl rand -hex 32),四个互不相同
 #                        # API=admin/写(仅服务端) READ=只读(进客户端 bundle)
@@ -111,6 +113,8 @@ PLATFORM_API_BASE=https://<DOMAIN> PLATFORM_READ_TOKEN=<READ_TOKEN> npm run buil
 opdev upload ./dist            # 交互要 version/description,用 expect 精确应答(见 publisher/README 或 plugin 备注)
 # 或直接用 scripts/release-widget.sh(自动注入只读 token + 上传)
 ```
+
+> 发布/管理脚本(`scripts/publish-plugin.sh`、`scripts/manage-plugins.sh`、`scripts/release.sh`)读 `scripts/deploy.env`(由 `deploy.example.env` 复制,已 gitignore)。其中 `PLATFORM_API_TOKEN` **故意留空**——脚本会用 `SERVER_HOST`/`SSH_KEY` 经 SSH 从服务器 `deploy/compose/.env` 里 grep 出 admin token,避免 admin token 落本地。
 
 到开发者后台 → 该应用「多维表格数据表视图」扩展 → 「小组件版本」选刚传的新版本。
 

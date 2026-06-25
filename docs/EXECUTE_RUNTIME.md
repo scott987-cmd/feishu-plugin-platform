@@ -134,7 +134,7 @@ FieldShortcut {
 
 ```
 POST /execute
-Authorization: Bearer <PLATFORM_API_TOKEN>      # 若走方案B，由 api 注入
+Authorization: Bearer <EXECUTE_RUNNER_TOKEN>    # 若走方案B，由 api 注入；runner 侧用 PLATFORM_API_TOKEN 读取并校验
 Content-Type: application/json
 
 {
@@ -157,6 +157,10 @@ Content-Type: application/json
 - 12-factor：配置走 env / ConfigMap / Secret；可被现有编排平滑接入。
 - 渲染器拿到 `data` 后，按 Result 定义渲染成单元格/列（沿用现有渲染器层）。
 - **已实现**：`/execute` 收 inline `dsl`；M2 验证用的就是这个形态。
+- **令牌契约（已落地，B1 能力分离）**：
+  - **client → api**（`POST /api/execute`）= **只读** `PLATFORM_READ_TOKEN`（与渲染所需的 `GET /api/apps*` 同一只读令牌，可安全嵌入客户端 bundle；泄露也只能读/算，不能改目录、不耗 LLM 预算）。
+  - **api → runner** = `EXECUTE_RUNNER_TOKEN`（仅服务端持有，`cmd/api/main.go` 注入到转发请求的 `Authorization: Bearer`）；runner 侧用 `PLATFORM_API_TOKEN` 读取并校验同一个值（`cmd/execute-runner/main.go`）。两条边各用各的令牌，client 永远拿不到 runner 令牌。
+- **并发上限（已落地）**：runner 用 `EXECUTE_MAX_CONCURRENCY`(默认 64) 限制在飞请求数；过载即 **HTTP 429 + Retry-After** 卸载，而不是把 pod 拖死（`cmd/execute-runner/main.go`）。
 
 ### 6.1 收口模型：pluginId 优先（校准自官方模式）
 
@@ -168,9 +172,20 @@ Content-Type: application/json
 ### 6.2 请求验证模型（对应官方 baseSignature + packID）
 
 官方：捷径请求外部后端带 `baseSignature`（飞书签名）+ `packID`，后端用开发者公钥验签确认来源。我们的等价物：
-- **call-chain B（推荐）**：webview→api 用现有 Bearer（`PLATFORM_API_TOKEN`）+ CORS 收敛到飞书 webview Origin；api→runner 集群内 + Bearer；runner 不暴露公网。验证集中在 api，runner 只信任 api。
+- **call-chain B（推荐）**：webview→api 用只读 Bearer（`PLATFORM_READ_TOKEN`）+ CORS 收敛到飞书 webview Origin；api→runner 集群内 + Bearer（`EXECUTE_RUNNER_TOKEN`，runner 侧读作 `PLATFORM_API_TOKEN`）；runner 不暴露公网。验证集中在 api，runner 只信任 api。
 - **call-chain A（webview 直连 runner）**：才需要把官方 `baseSignature` 验签搬到 runner（公钥验签 + `packID` 校验），防止他人直接打 runner。默认走 B 即可回避。
 - 自托管下两端都在客户域内，信任边界更短；但 Bearer + CORS + TLS + 域名白名单仍是底线。
+
+### 6.3 出网账本 / Egress Ledger（已落地）
+
+「这个插件到底连了哪些外网、连成没连成」从一句设计目标变成了**逐跳落库的审计事实**。每一次出站尝试（多步链里的每一跳）在 `execrt.fetch` 咽喉点经 `EgressRecorder` 接口发出**一条** `action=execute.egress` 审计事件，写进与平台审计同一张 `audit_log` 表，可经管理员 `GET /api/audit` 回看：
+
+- **字段**：`actor=plugin:<id>`（归属 = api `/api/execute` 透传的平台 pluginId，缺失时回退 `fs.ID`）、`target=<host>`、`detail=method/outcome/step`。
+- **拦截即审计**：SSRF / 重定向 / 域名白名单等拦截以 `outcome=error` 落库——「被拦的出网」和「成功的出网」一样留痕。
+- **热路径安全**：stdout **永远**先打一行；落库走**单 worker 异步缓冲**（1024 缓冲，满则丢审计写、绝不阻塞 execute，丢弃计数另行记账）。
+- **优雅 drain**：`SIGTERM → HTTP 先停 → worker 把缓冲冲完再退`（10s 上限），所以 pod 重启不丢已缓冲记录。
+- **落库前提**：runner 需配 `FEISHU_APP_ID/SECRET/BITABLE_APP_TOKEN` + `FEISHU_AUDIT_TABLE_ID` 才持久化；任一缺失 = 仅 stdout（`audit_log` 表由 `bitable-bootstrap` 创建）。
+- 实现：`internal/execrt/engine.go`(`EgressRecorder` 接口 + `fetch` 咽喉点)、`cmd/execute-runner/main.go`(异步缓冲 + drain)、`internal/api/execute.go`(透传 pluginId 归属)。测试：`internal/execrt/egress_test.go`。
 
 ---
 
@@ -196,9 +211,12 @@ Content-Type: application/json
 3. **用户 Auth 凭证** —— 自托管下只存客户集群（Secret / 定义表），绝不出集群；运行时随请求带入、用完即弃、不落盘。
 4. **执行模型 = 解释声明式 DSL**（红线①由构造保证）；Phase 4b 的 quickjs 任意代码沙箱**默认不做**，仅当模板覆盖不到再上。
 
+**已落地（原开放项）：**
+- **出网逐跳审计** ✅ —— 出网/拦截已逐跳落 `execute.egress` 审计账本（见 §6.3），「这个插件连了哪些外网、连成没连成」可经 `GET /api/audit` 回看；不再是开放项。
+
 **剩余开放项：**
 5. **出网白名单强制层**：CNI egress netpol（需 Calico/Cilium）还是 forward proxy？取决于客户集群 CNI（M3/M4 按客户环境定）。
-6. **可观测**：execute 调用的成功率/延迟/出网拦截单独打点（呼应「余额/故障第一时间发现」既有纪律）。
+6. **可观测（指标层）**：execute 调用的成功率/延迟还可补一层 metrics 打点（审计账本已覆盖逐跳事实，呼应「余额/故障第一时间发现」既有纪律）。
 7. **凭证复用**：同一插件多次执行是否在客户集群内加密存一份凭证复用，还是每次由 webview 配置带入？（影响 §6.2 与凭证 UX）
 
 ---
@@ -206,14 +224,12 @@ Content-Type: application/json
 ## 9. 里程碑
 
 - **M1 设计**（本文）✅。
-- **M2 解释器服务** ✅ **已完成并真实验证**：`cmd/execute-runner` + `/execute` API；`internal/execrt`（`eval.go` Go 求值器 + `engine.go` 多步/单步 fetch + 映射 + SSRF 守卫）；复用 `internal/shortcut` 的校验/Domains。单测覆盖：算术/函数/条件/路径/rand、func parity、多步链、Domains 拒绝、SSRF 拒绝、单步 QueryParam 鉴权、非法 DSL 拒绝。`go build/vet/test ./...` 全绿。**真实端到端冒烟**：服务实跑「城市→天气」DSL，对真实 Open-Meteo 返回 Beijing 26.3℃ / Tokyo 19.6℃ / London 30.6℃ / Paris 33.9℃（多步链：地理编码→天气，纯自托管解释，无飞书 FaaS）。
-- **M3 上 k8s** —— **后端部分已完成并本地验证**：
-  - ✅ `deploy/k8s/15-execute-runner.yaml`（Deployment×2 + Service + HPA，securityContext 抄 api，SSRF 守卫 ON）；`Dockerfile.execute-runner`（distroless nonroot）。
-  - ✅ netpol：`allow-api-to-execute-runner`（仅 api 入站）+ `execute-runner-egress`（DNS+443/80 下限；硬域名白名单走 forward proxy / Calico-Cilium）。
-  - ✅ ConfigMap `EXECUTE_RUNNER_URL` + Secret `EXECUTE_RUNNER_TOKEN`；api Deployment 注入二者。
-  - ✅ **调用链 B 已实现并真实验证**：`POST /api/execute`（`internal/api/execute.go`）转发到 runner；支持 inline `dsl` 与 `pluginId`(会话+插件存储取 DSL,收口模型)；单测覆盖（503未配置/inline转发+Bearer/缺参/pluginId需登录）。**真实本地端到端**：真 api → 真 runner → 真 Open-Meteo，`/api/execute` 返回北京 26℃/7.6km/h。
-  - ✅ k8s YAML 全部语法校验通过（结构镜像已 kind 验证过的 20-api）。
-  - ⏳ **剩余（需用户云上基础设施，同既有 deploy 故事）**：把 execute-runner 镜像部署到 AWS/k8s（现 compose+STORE=memory），+ 容器渲染器加一条「读城市列→调 /api/execute→展示天气」的只读调用 + opdev 发版，做出**真实自托管 Bitable 里的端到端演示**。
+- **M2 解释器服务** ✅ **已完成并真实验证**：`cmd/execute-runner` + `/execute` API；`internal/execrt`（`eval.go` Go 求值器 + `engine.go` 多步/单步 fetch + 映射 + SSRF 守卫）；复用 `internal/shortcut` 的校验/Domains。单测覆盖：算术/函数/条件/路径/rand、func parity、多步链、Domains 拒绝、SSRF 拒绝、单步 QueryParam 鉴权、非法 DSL 拒绝、**出网账本（`egress_test.go`：逐跳事件 + 拦截=error + 异步缓冲/drain）**。`go build/vet/test ./...` 全绿。**真实端到端冒烟**：服务实跑「城市→天气」DSL，对真实 Open-Meteo 返回 Beijing 26.3℃ / Tokyo 19.6℃ / London 30.6℃ / Paris 33.9℃（多步链：地理编码→天气，纯自托管解释，无飞书 FaaS）。
+- **M3 上线** ✅ **已完成并端到端真实验证（2026-06-25）**——**生产形态 = AWS EC2 上单节点 docker compose + Caddy 自动 TLS（Let's Encrypt 经 `<ip>.sslip.io` magic-DNS 主机签发），`STORE=bitable`**；`deploy/k8s/` 是**可选的未来横向扩展路径，不是当前主线**：
+  - ✅ `deploy/compose/docker-compose.prod.yml` 把 execute-runner 与 api/generator 一起跑在 EC2；k8s 物料（`deploy/k8s/15-execute-runner.yaml` Deployment×2 + Service + HPA，securityContext 抄 api，SSRF 守卫 ON；`Dockerfile.execute-runner` distroless nonroot；netpol `allow-api-to-execute-runner` + `execute-runner-egress`）保留为可选扩展路径。
+  - ✅ ConfigMap/compose 注入 `EXECUTE_RUNNER_URL` + `EXECUTE_RUNNER_TOKEN`（api 侧）/ `PLATFORM_API_TOKEN`（runner 侧读取同值校验）+ `EXECUTE_MAX_CONCURRENCY`。
+  - ✅ **调用链 B 已实现并真实验证**：`POST /api/execute`（`internal/api/execute.go`，client 用只读 `PLATFORM_READ_TOKEN`）转发到 runner；支持 inline `dsl` 与 `pluginId`(会话+插件存储取 DSL,收口模型)；单测覆盖（503未配置/inline转发+Bearer/缺参/pluginId需登录）。
+  - ✅ **真实生产端到端（EC2，`STORE=bitable`）**：真 client → 真 api(`/api/execute`) → 真 runner → 真 Open-Meteo，并把每跳 `execute.egress` 落进飞书 Base 的 `audit_log` 表（经 `GET /api/audit` 可回看）。
 - **M4 加固**：资源配额、出网代理、（按需）Phase 4b 沙箱 per-app pod 隔离。
 
 ---

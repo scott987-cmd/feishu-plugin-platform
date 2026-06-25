@@ -34,7 +34,17 @@ cp scripts/deploy.example.env scripts/deploy.env
 ```
 
 On the server side, `deploy/compose/.env` (create it from `deploy/compose/.env.prod.example` on first run; it contains secrets, so keep it on the server and never commit it):
-`DOMAIN / PLATFORM_API_TOKEN / EXECUTE_RUNNER_TOKEN / DEEPSEEK_API_KEY / STORE / FEISHU_*`.
+`DOMAIN / PLATFORM_API_TOKEN / PLATFORM_READ_TOKEN / GENERATOR_TOKEN / EXECUTE_RUNNER_TOKEN / DEEPSEEK_API_KEY / STORE / ALLOWED_ORIGIN / FEISHU_*`.
+
+> **Required tokens (the prod compose enforces them via `${VAR:?}` — missing any fails startup):**
+> - `PLATFORM_API_TOKEN` — admin/write bearer, server-only (POST/DELETE /api/apps + /api/generate)
+> - `PLATFORM_READ_TOKEN` — read-only token, baked into the client bundle, **must differ from the admin token** (GET /api/apps* + POST /api/execute)
+> - `GENERATOR_TOKEN` — shared between api ↔ generator
+> - `EXECUTE_RUNNER_TOKEN` — shared between api ↔ execute-runner
+>
+> Generate a separate strong random value for each (**all distinct**): `openssl rand -hex 32`.
+>
+> **`ALLOWED_ORIGIN`**: with auth enabled it **cannot** be `*`, or the api refuses to start (`cmd/api/main.go` log.Fatal). Set a specific origin (e.g. `https://<IP>.sslip.io`); only for local dev may you set `ALLOWED_ORIGIN_INSECURE=true` to override.
 
 Log into opdev once (scan the QR code in the browser; the token is stored globally): `opdev login -e feishu`.
 
@@ -72,12 +82,29 @@ After uploading, `release-widget.sh` prints a link. In the console:
 ```bash
 # Backend (deploy-backend.sh already runs a health check at the end):
 curl -s https://<DOMAIN>/healthz        # ok
-curl -s -H "Authorization: Bearer <TOKEN>" https://<DOMAIN>/api/apps   # JSON list
+# GET /api/apps only needs the read-only token (PLATFORM_READ_TOKEN):
+curl -s -H "Authorization: Bearer <PLATFORM_READ_TOKEN>" https://<DOMAIN>/api/apps   # JSON list
 
 # Self-hosted execution runtime (city → weather, real data, via api→execute-runner→external API):
 #   see the /api/execute example in deploy/compose/DEPLOY.en.md §3.1.
 ```
 On the plugin side: open the extension-view plugin in the Bitable and confirm rendering / data fetching works (a new version takes about 30–60s to propagate; wait it out, don't keep hammering refresh).
+
+---
+
+## 3.1 Audit / Egress Ledger
+
+With persisted auditing enabled, the platform appends both **admin operations** (action=…) and **every outbound call** (action=execute.egress, actor=plugin:<id>, with method/outcome/step; SSRF/redirect blocks = outcome=error) into the same `audit_log` table.
+
+- The table is created by `cmd/bitable-bootstrap`; after running it prints `FEISHU_AUDIT_TABLE_ID=…` — put that into the server `.env`.
+- `FEISHU_AUDIT_TABLE_ID` **empty = stdout-only** (nothing persisted); set it to persist (append failures never fail the request — best-effort).
+- Verify (`/api/audit` is **admin**-token-only, newest-first, `?limit≤1000`):
+
+```bash
+curl -s -H "Authorization: Bearer <PLATFORM_API_TOKEN>" \
+  "https://<DOMAIN>/api/audit?limit=50"   # most recent 50 audit/egress records
+# When unconfigured, returns 503: audit ledger not configured (set FEISHU_AUDIT_TABLE_ID)
+```
 
 ---
 
@@ -102,6 +129,8 @@ The console step can be further API-ified, achieving "commit equals live":
 | Local ssh reports `Operation not permitted` and can't read the key | macOS TCC: Terminal lacks `~/Downloads` permission. Put the key in `~/.ssh/`, or grant Terminal "Full Disk Access". |
 | Feishu webview `Failed to fetch` | Add the backend domain under "Security settings → Server domain allowlist"; after adding, release a new version for it to take effect. |
 | `execute` fails calling an external API | The domain isn't in the plugin's `domains` allowlist (the runtime hard-rejects it); or the server's outbound network is restricted. |
+| compose reports `required variable … is missing a value` | An old `.env` is missing a required token — the prod compose enforces them via `${VAR:?}`; add `PLATFORM_READ_TOKEN / GENERATOR_TOKEN / EXECUTE_RUNNER_TOKEN` (each `openssl rand -hex 32`, all distinct). |
+| api restart-loops / log `refusing to start: ALLOWED_ORIGIN=*` | Auth is enabled but CORS is open — set `ALLOWED_ORIGIN` to a specific origin, or set `ALLOWED_ORIGIN_INSECURE=true` for dev only. |
 
 ---
 
@@ -110,3 +139,4 @@ The console step can be further API-ified, achieving "commit equals live":
 - `deploy/k8s/` —— Kubernetes manifests (including `15-execute-runner.yaml` + netpol)
 - `EXECUTE_RUNTIME.en.md` —— self-hosted execution runtime design
 - `PRODUCTION.en.md` —— production hardening checklist and known boundaries
+- `scripts/backup-defs.sh` —— back up the app/plugin definitions in the Feishu Base (DR/backup)

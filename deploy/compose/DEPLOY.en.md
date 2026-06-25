@@ -7,6 +7,8 @@ Goal: obtain a **fixed public URL with a valid TLS certificate** so that the Fei
 
 > Route choice: for single-tenant scale, start with compose; the benefits of k8s (per-app sandbox pod isolation) only materialize in Phase4,
 > see `deploy/k8s/`. This directory is exactly the "compose first" step on the roadmap.
+>
+> Reference deployment: verified end-to-end on an AWS EC2 host (`STORE=bitable`, Caddy auto-TLS, 2026-06-25).
 
 ---
 
@@ -15,7 +17,7 @@ Goal: obtain a **fixed public URL with a valid TLS certificate** so that the Fei
 | Item | Notes |
 |---|---|
 | Public Linux server | 1C2G is enough to start (Ubuntu/Debian examples) |
-| Domain name | An A record pointing to the server's public IP, e.g. `fpp.example.com → 1.2.3.4`. **The webview requires valid TLS, so you must use a domain; a bare IP won't work** |
+| Domain name | An A record pointing to the server's public IP, e.g. `fpp.example.com → 1.2.3.4`. **The webview requires valid TLS, so you must use a domain; a bare IP won't work**. Don't want to buy a domain: use the magic-DNS host `<public-IP>.sslip.io` (it resolves straight back to that IP) and Caddy still issues a real Let's Encrypt certificate |
 | Firewall / security group | Open `80` and `443` (80 is used for ACME certificate issuance + HTTPS redirect) |
 | Secrets | DeepSeek key, Feishu App ID/Secret, Bitable `app_token`/`table_id` (you already have these in your local `.env.local`) |
 
@@ -34,7 +36,7 @@ cd feishu-plugin-platform/deploy/compose
 
 cp .env.prod.example .env
 # edit .env and fill in:
-#   DOMAIN=your domain
+#   DOMAIN=your domain     # no domain? use <public-IP>.sslip.io; Caddy still issues real TLS
 #   PLATFORM_API_TOKEN / PLATFORM_READ_TOKEN / EXECUTE_RUNNER_TOKEN / GENERATOR_TOKEN
 #                        # each $(openssl rand -hex 32), all four distinct
 #                        # API=admin/write (server-side only) READ=read-only (goes into the client bundle)
@@ -111,6 +113,8 @@ PLATFORM_API_BASE=https://<DOMAIN> PLATFORM_READ_TOKEN=<READ_TOKEN> npm run buil
 opdev upload ./dist            # interactively asks for version/description; answer precisely with expect (see publisher/README or the plugin notes)
 # or just use scripts/release-widget.sh (auto-injects the read-only token + uploads)
 ```
+
+> The publish/manage scripts (`scripts/publish-plugin.sh`, `scripts/manage-plugins.sh`, `scripts/release.sh`) read `scripts/deploy.env` (copied from `deploy.example.env`, gitignored). Its `PLATFORM_API_TOKEN` is **intentionally left blank** — the scripts use `SERVER_HOST`/`SSH_KEY` to grep the admin token out of the server's `deploy/compose/.env` over SSH, so the admin token never lands on your local machine.
 
 In the developer console → that app's "Bitable data-table view" extension → "Widget version", select the version you just uploaded.
 

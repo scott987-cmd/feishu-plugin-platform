@@ -136,7 +136,7 @@ Feishu webview (not in k8s)              Customer's own k8s / k3s cluster
 
 ```
 POST /execute
-Authorization: Bearer <PLATFORM_API_TOKEN>      # if using option B, injected by api
+Authorization: Bearer <EXECUTE_RUNNER_TOKEN>    # if using option B, injected by api; the runner reads/validates it as PLATFORM_API_TOKEN
 Content-Type: application/json
 
 {
@@ -159,6 +159,10 @@ Content-Type: application/json
 - 12-factor: config goes through env / ConfigMap / Secret; can be smoothly integrated into the existing orchestration.
 - After the renderer obtains `data`, it renders it into a cell/column per the Result definition (following the existing renderer layer).
 - **Already implemented**: `/execute` accepts an inline `dsl`; this is exactly the form used for M2 validation.
+- **Token contract (shipped, B1 capability split)**:
+  - **client → api** (`POST /api/execute`) = the **read-only** `PLATFORM_READ_TOKEN` (the same read-only token rendering already needs for `GET /api/apps*`; safe to embed in the client bundle — leaking it can only read/compute, cannot mutate the catalog or spend the LLM budget).
+  - **api → runner** = `EXECUTE_RUNNER_TOKEN` (server-only; `cmd/api/main.go` injects it as the forwarded request's `Authorization: Bearer`); the runner reads/validates the same value via `PLATFORM_API_TOKEN` (`cmd/execute-runner/main.go`). Each hop uses its own token; the client never sees the runner token.
+- **Concurrency cap (shipped)**: the runner limits in-flight requests via `EXECUTE_MAX_CONCURRENCY` (default 64); on overload it sheds with **HTTP 429 + Retry-After** rather than hanging the pod (`cmd/execute-runner/main.go`).
 
 ### 6.1 Convergence Model: pluginId First (Calibrated from the Official Pattern)
 
@@ -170,9 +174,20 @@ In the official pattern each shortcut connects to its own backend; we **converge
 ### 6.2 Request Verification Model (Corresponding to the Official baseSignature + packID)
 
 Official: the shortcut request to the external backend carries `baseSignature` (Feishu signature) + `packID`, and the backend verifies the signature with the developer's public key to confirm the origin. Our equivalent:
-- **call-chain B (recommended)**: webview→api uses the existing Bearer (`PLATFORM_API_TOKEN`) + CORS narrowed to the Feishu webview Origin; api→runner is in-cluster + Bearer; the runner is not exposed to the public network. Verification is centralized in api, and the runner only trusts api.
+- **call-chain B (recommended)**: webview→api uses the read-only Bearer (`PLATFORM_READ_TOKEN`) + CORS narrowed to the Feishu webview Origin; api→runner is in-cluster + Bearer (`EXECUTE_RUNNER_TOKEN`, read by the runner as `PLATFORM_API_TOKEN`); the runner is not exposed to the public network. Verification is centralized in api, and the runner only trusts api.
 - **call-chain A (webview connects to runner directly)**: only then do you need to move the official `baseSignature` verification onto the runner (public-key signature verification + `packID` validation) to prevent others from hitting the runner directly. Going with B by default avoids this.
 - When self-hosted both ends are within the customer's domain, so the trust boundary is shorter; but Bearer + CORS + TLS + domain whitelist remain the baseline.
+
+### 6.3 Egress Ledger (shipped)
+
+"Which external networks did this plugin reach, and did the call succeed" went from a design goal to a **per-hop audited fact**. Every outbound attempt (each hop in a multi-step chain) emits **one** `action=execute.egress` audit event at the `execrt.fetch` chokepoint via the `EgressRecorder` interface, written into the **same** `audit_log` table as the platform audit and reviewable through the admin `GET /api/audit`:
+
+- **Fields**: `actor=plugin:<id>` (attribution = the platform pluginId forwarded by api's `/api/execute`, falling back to `fs.ID`), `target=<host>`, `detail=method/outcome/step`.
+- **Blocks are audited too**: SSRF / redirect / domain-whitelist blocks are recorded with `outcome=error` — a "blocked egress" leaves a trail just like a successful one.
+- **Hot-path-safe**: stdout is **always** written first; persistence runs on a **single async-buffered worker** (1024-buffer; when full it sheds the audit write and never blocks execute, accounting the drop count separately).
+- **Graceful drain**: `SIGTERM → HTTP drains first → the worker flushes the buffer before exiting` (10s cap), so a pod restart drops no buffered record.
+- **Persistence prerequisite**: the runner needs `FEISHU_APP_ID/SECRET/BITABLE_APP_TOKEN` + `FEISHU_AUDIT_TABLE_ID` to persist; any missing = stdout-only (the `audit_log` table is created by `bitable-bootstrap`).
+- Implementation: `internal/execrt/engine.go` (`EgressRecorder` interface + `fetch` chokepoint), `cmd/execute-runner/main.go` (async buffer + drain), `internal/api/execute.go` (forwards pluginId for attribution). Tests: `internal/execrt/egress_test.go`.
 
 ---
 
@@ -198,9 +213,12 @@ Official: the shortcut request to the external backend carries `baseSignature` (
 3. **User Auth credentials** — when self-hosted they are only stored in the customer's cluster (Secret / definition table) and never leave the cluster; at runtime they are carried in with the request, discarded after use, and not persisted.
 4. **Execution model = interpret declarative DSL** (red line ① guaranteed by construction); the Phase 4b quickjs arbitrary-code sandbox is **not done by default**, only added when templates cannot cover the case.
 
+**Shipped (formerly open items):**
+- **Per-hop outbound auditing** ✅ — every outbound hop / block is now recorded in the `execute.egress` audit ledger (see §6.3); "which external networks this plugin reached and whether the call succeeded" is reviewable via `GET /api/audit`. No longer an open item.
+
 **Remaining open items:**
 5. **Outbound whitelist enforcement layer**: CNI egress netpol (requires Calico/Cilium) or a forward proxy? Depends on the customer's cluster CNI (decided in M3/M4 per the customer's environment).
-6. **Observability**: separately instrument the success rate / latency / outbound interceptions of execute calls (echoing the existing discipline of "spot balance/failures at the first moment").
+6. **Observability (metrics layer)**: the success rate / latency of execute calls could still get a metrics layer (the audit ledger already covers the per-hop facts; echoing the existing discipline of "spot balance/failures at the first moment").
 7. **Credential reuse**: should multiple executions of the same plugin store one encrypted copy of the credential in the customer's cluster for reuse, or have it carried in by the webview config each time? (Affects §6.2 and the credential UX.)
 
 ---
@@ -208,14 +226,12 @@ Official: the shortcut request to the external backend carries `baseSignature` (
 ## 9. Milestones
 
 - **M1 Design** (this doc) ✅.
-- **M2 Interpreter service** ✅ **completed and verified for real**: `cmd/execute-runner` + `/execute` API; `internal/execrt` (`eval.go` Go evaluator + `engine.go` multi-step/single-step fetch + mapping + SSRF guard); reuses `internal/shortcut`'s validation/Domains. Unit-test coverage: arithmetic/functions/conditionals/paths/rand, func parity, multi-step chains, Domains rejection, SSRF rejection, single-step QueryParam auth, invalid-DSL rejection. `go build/vet/test ./...` all green. **Real end-to-end smoke test**: the service actually ran the "city → weather" DSL and returned, for the real Open-Meteo, Beijing 26.3℃ / Tokyo 19.6℃ / London 30.6℃ / Paris 33.9℃ (multi-step chain: geocoding → weather, pure self-hosted interpretation, no Feishu FaaS).
-- **M3 Onto k8s** — **the backend part is completed and locally verified**:
-  - ✅ `deploy/k8s/15-execute-runner.yaml` (Deployment×2 + Service + HPA, securityContext copied from api, SSRF guard ON); `Dockerfile.execute-runner` (distroless nonroot).
-  - ✅ netpol: `allow-api-to-execute-runner` (api inbound only) + `execute-runner-egress` (DNS+443/80 lower bound; hard domain whitelist goes through forward proxy / Calico-Cilium).
-  - ✅ ConfigMap `EXECUTE_RUNNER_URL` + Secret `EXECUTE_RUNNER_TOKEN`; api Deployment injects both.
-  - ✅ **Call chain B implemented and verified for real**: `POST /api/execute` (`internal/api/execute.go`) forwards to the runner; supports inline `dsl` and `pluginId` (fetches DSL from session + plugin store, convergence model); unit-test coverage (503 when unconfigured / inline forward + Bearer / missing params / pluginId requires login). **Real local end-to-end**: real api → real runner → real Open-Meteo, `/api/execute` returns Beijing 26℃ / 7.6km/h.
-  - ✅ All k8s YAML passes syntax validation (structure mirrors the kind-verified 20-api).
-  - ⏳ **Remaining (requires the user's cloud infrastructure, same as the existing deploy story)**: deploy the execute-runner image to AWS/k8s (currently compose+STORE=memory), + add a read-only call to the container renderer that "reads the city column → calls /api/execute → displays the weather" + opdev release, to produce a **real end-to-end demo inside a real self-hosted Bitable**.
+- **M2 Interpreter service** ✅ **completed and verified for real**: `cmd/execute-runner` + `/execute` API; `internal/execrt` (`eval.go` Go evaluator + `engine.go` multi-step/single-step fetch + mapping + SSRF guard); reuses `internal/shortcut`'s validation/Domains. Unit-test coverage: arithmetic/functions/conditionals/paths/rand, func parity, multi-step chains, Domains rejection, SSRF rejection, single-step QueryParam auth, invalid-DSL rejection, **egress ledger (`egress_test.go`: per-hop events + blocks=error + async-buffer/drain)**. `go build/vet/test ./...` all green. **Real end-to-end smoke test**: the service actually ran the "city → weather" DSL and returned, for the real Open-Meteo, Beijing 26.3℃ / Tokyo 19.6℃ / London 30.6℃ / Paris 33.9℃ (multi-step chain: geocoding → weather, pure self-hosted interpretation, no Feishu FaaS).
+- **M3 Live** ✅ **completed and verified end-to-end for real (2026-06-25)** — **production = single-node docker compose + Caddy auto-TLS on an AWS EC2 host (Let's Encrypt issued via a `<ip>.sslip.io` magic-DNS host), `STORE=bitable`**; `deploy/k8s/` is the **optional future/scale-out path, NOT the primary**:
+  - ✅ `deploy/compose/docker-compose.prod.yml` runs execute-runner alongside api/generator on EC2; the k8s assets (`deploy/k8s/15-execute-runner.yaml` Deployment×2 + Service + HPA, securityContext copied from api, SSRF guard ON; `Dockerfile.execute-runner` distroless nonroot; netpol `allow-api-to-execute-runner` + `execute-runner-egress`) are retained as the optional scale-out path.
+  - ✅ ConfigMap/compose injects `EXECUTE_RUNNER_URL` + `EXECUTE_RUNNER_TOKEN` (api side) / `PLATFORM_API_TOKEN` (runner reads the same value to validate) + `EXECUTE_MAX_CONCURRENCY`.
+  - ✅ **Call chain B implemented and verified for real**: `POST /api/execute` (`internal/api/execute.go`, client uses the read-only `PLATFORM_READ_TOKEN`) forwards to the runner; supports inline `dsl` and `pluginId` (fetches DSL from session + plugin store, convergence model); unit-test coverage (503 when unconfigured / inline forward + Bearer / missing params / pluginId requires login).
+  - ✅ **Real production end-to-end (EC2, `STORE=bitable`)**: real client → real api (`/api/execute`) → real runner → real Open-Meteo, with every `execute.egress` hop persisted into the Feishu Base `audit_log` table (reviewable via `GET /api/audit`).
 - **M4 Hardening**: resource quotas, outbound proxy, (as needed) Phase 4b sandbox per-app pod isolation.
 
 ---
