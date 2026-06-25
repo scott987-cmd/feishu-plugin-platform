@@ -131,7 +131,7 @@
 - **容器模式**:容器只审一次,生成物是 DSL 数据。后端鉴权已做**能力分离**(客户端只内嵌只读 `PLATFORM_READ_TOKEN` / admin `PLATFORM_API_TOKEN` 管写删 / 会话),即便客户端 token 泄露也只能读。**遗留**:widget 在 Bitable webview 内尚非真·per-user 身份(需 webview-OAuth),强多租户/对外敏感场景仍建议走导出模式或补 per-user。
 
 **必补缺口**(否则不算企业级合规):
-1. **发布审计流水账**:publisher 现仅截图做校准,无"谁/何时/哪租户/哪版本/源码哈希"不可篡改日志,也没做**上传 bundle 与受审源码一致性比对(attestation)**。→ 即下「企业增强路线」#1/#2(持久化审计账本 + 出网账本)。
+1. ~~**发布审计流水账**~~ → **目录写删审计已做**:持久化 Bitable 账本 + `GET /api/audit`(admin、追加式、newest-first),见 [PRODUCTION](PRODUCTION.md) §11。**仍待**:出网账本(execute 逐次出网)+ bundle↔受审源码哈希比对(attestation),见下「企业增强路线」#2。
 2. ~~**共享 token 升级**~~ → **已做**:能力分离鉴权落地(客户端只读 / admin 写删 / 会话),见 [PRODUCTION](PRODUCTION.md) §7「鉴权 / 安全」。
 
 > ⚠️ **须在目标控制台亲核**(事实核查低置信):① 飞书官方介绍页当前确认 GA 的扩展类型为**记录视图 / 数据表视图 / 自动化操作 + 字段捷径(server 能力)**;"连接器/仪表盘"作为官方插件类型未在官方页确认(或属路线图/旧版)。② 免审默认人数、私有化部署 OAuth2 行为网上常错,以私有化控制台为准。
@@ -147,7 +147,7 @@
 
 | # | 能力 | 量 | 它解决什么 | 怎么建(复用现成) |
 |---|------|----|-----------|------------------|
-| 1 | **持久化审计账本 + 只读查看器** | M | 把现在的 `AUDIT` stdout 行(重启即丢)变成可筛选、抗篡改的 who/when/what/which-version 痕迹——正是上文「必补缺口 #1」 | 新增 AuditStore,**完全复刻 BitablePluginStore 模式**把记录 append 进专用 Bitable 表;`server.go` 两处 `log.Printf("AUDIT")` 改为 store append;`GET /api/audit`(admin)。管理员在 Base UI 原生查询,零新控制台 |
+| ✅1 | **持久化审计账本 + 只读查看器** —— **已做** | M | 把现在的 `AUDIT` stdout 行(重启即丢)变成可筛选、抗篡改的 who/when/what/which-version 痕迹——正是上文「必补缺口 #1」 | 已落地:`BitableAuditStore`(复刻 BitablePluginStore 模式,追加式)+ `server.go` 写删改走 `recordAudit`(stdout + 持久化)+ `GET /api/audit`(admin、newest-first)+ `bitable-bootstrap` 建 `audit_log` 表 + `FEISHU_AUDIT_TABLE_ID` 旋钮。见 PRODUCTION §11 |
 | 2 | **execute-runtime 逐次出网账本** | M | 记录「哪个插件把哪行数据发给了哪个外部域名、为谁、放行/拦截」——信创安全团队要的 DLP 出网证据,坐实 README 已宣称的"出网集中审计" | runner 已在 `execrt.Engine.Run` 收口每次出网且已知 host + PluginID;每次 fetch 落一条结构化记录进 #1 同一张审计表。全平台合规敏感度最高的一点 |
 | 3 | **UI 内"试运行"(dry-run)** | M | 小白在走上传+审核链路前,先看插件真调 API、产出真值——杀死"生成黑盒→盲传→等审→发现错了"的循环 | execute-runner 已能跑 DSL+inputs 返回映射结果;`web/shortcut.html` 把刚生成的 DSL+样例输入 POST 到现成的 `/api/execute` 内联路径。后端几乎零改动,作者信任增益最高 |
 | 4 | **人话化失败解释** | S | 小白撞上 TS 编译栈直接放弃;友好、可行动的提示留住人、降工单 | Verifier 已把 `build:field` 编译错回喂修复循环;最终失败时给这些错加一层翻译(TS2554「缺参」→「这个捷径需要你没提到的一个输入」)。最低成本广覆盖 |

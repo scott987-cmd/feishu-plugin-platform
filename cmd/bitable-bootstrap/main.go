@@ -1,5 +1,6 @@
-// Command bitable-bootstrap creates the Base + table that the platform's
-// BitableStore expects — using the Feishu OpenAPI directly: NO lark-cli, NO QR
+// Command bitable-bootstrap creates the Base + the app_definitions table that the
+// platform's BitableStore expects, plus the audit_log table for the persisted audit
+// ledger — using the Feishu OpenAPI directly: NO lark-cli, NO QR
 // login. It authenticates with the app's own tenant_access_token (app identity),
 // so only FEISHU_APP_ID + FEISHU_APP_SECRET are needed. Feishu is a domestic
 // endpoint, so the HTTP client bypasses any HTTPS_PROXY.
@@ -7,7 +8,7 @@
 // Run once, then pass the printed tokens to cmd/api with STORE=bitable:
 //
 //	FEISHU_APP_ID=... FEISHU_APP_SECRET=... go run ./cmd/bitable-bootstrap
-//	# -> prints FEISHU_BITABLE_APP_TOKEN / FEISHU_BITABLE_TABLE_ID
+//	# -> prints FEISHU_BITABLE_APP_TOKEN / FEISHU_BITABLE_TABLE_ID / FEISHU_AUDIT_TABLE_ID
 //
 // Optional env:
 //   - FEISHU_BITABLE_APP_TOKEN: reuse an existing Base instead of creating one.
@@ -61,13 +62,33 @@ func main() {
 	if tableName == "" {
 		tableName = "app_definitions"
 	}
-	tableID := createTable(ctx, client, token, appToken, tableName)
+	tableID := createTable(ctx, client, token, appToken, tableName, []map[string]any{
+		{"field_name": "id", "type": fieldText},
+		{"field_name": "name", "type": fieldText},
+		{"field_name": "version", "type": fieldNumber},
+		{"field_name": "definition", "type": fieldText},
+	})
 	log.Printf("created table %q: table_id=%s", tableName, tableID)
+
+	// Also provision the audit-ledger table (persisted audit trail; see
+	// docs/PRODUCTION.md «灾备 / 审计»). Cheap to create; ignore the printed ID if
+	// you don't enable the ledger.
+	auditTableID := createTable(ctx, client, token, appToken, "audit_log", []map[string]any{
+		{"field_name": "time", "type": fieldText},
+		{"field_name": "actor", "type": fieldText},
+		{"field_name": "action", "type": fieldText},
+		{"field_name": "target", "type": fieldText},
+		{"field_name": "version", "type": fieldNumber},
+		{"field_name": "ip", "type": fieldText},
+		{"field_name": "detail", "type": fieldText},
+	})
+	log.Printf("created table %q: table_id=%s", "audit_log", auditTableID)
 
 	fmt.Println()
 	fmt.Println("# paste these into the cmd/api environment (STORE=bitable):")
 	fmt.Println("FEISHU_BITABLE_APP_TOKEN=" + appToken)
 	fmt.Println("FEISHU_BITABLE_TABLE_ID=" + tableID)
+	fmt.Println("FEISHU_AUDIT_TABLE_ID=" + auditTableID + "  # optional: enables GET /api/audit")
 }
 
 func tenantToken(ctx context.Context, c *http.Client, appID, appSecret string) string {
@@ -101,15 +122,10 @@ func createBase(ctx context.Context, c *http.Client, token, name string) string 
 	return out.Data.App.AppToken
 }
 
-func createTable(ctx context.Context, c *http.Client, token, appToken, name string) string {
+func createTable(ctx context.Context, c *http.Client, token, appToken, name string, fields []map[string]any) string {
 	body := map[string]any{"table": map[string]any{
-		"name": name,
-		"fields": []map[string]any{
-			{"field_name": "id", "type": fieldText},
-			{"field_name": "name", "type": fieldText},
-			{"field_name": "version", "type": fieldNumber},
-			{"field_name": "definition", "type": fieldText},
-		},
+		"name":   name,
+		"fields": fields,
 	}}
 	var out struct {
 		Code int    `json:"code"`

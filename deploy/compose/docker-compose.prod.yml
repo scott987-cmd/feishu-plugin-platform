@@ -56,6 +56,7 @@ services:
       FEISHU_APP_SECRET: "${FEISHU_APP_SECRET:-}"
       FEISHU_BITABLE_APP_TOKEN: "${FEISHU_BITABLE_APP_TOKEN:-}"
       FEISHU_BITABLE_TABLE_ID: "${FEISHU_BITABLE_TABLE_ID:-}"
+      FEISHU_AUDIT_TABLE_ID: "${FEISHU_AUDIT_TABLE_ID:-}"
       PLATFORM_API_TOKEN: "${PLATFORM_API_TOKEN:?需设置一个强随机 bearer token(admin/写,仅服务端)}"
       # 只读 token:内嵌进 widget/web bundle(GET /api/apps + execute);须与 admin 不同。
       PLATFORM_READ_TOKEN: "${PLATFORM_READ_TOKEN:?需设置一个强随机只读 token(与 admin 不同)}"

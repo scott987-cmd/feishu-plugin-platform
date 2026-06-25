@@ -51,6 +51,9 @@ func main() {
 	}
 
 	server := api.New(st, cfg)
+	if a := buildAuditStore(); a != nil {
+		server = server.WithAudit(a)
+	}
 	authn := buildAuth()
 	if authn != nil {
 		server = server.WithAuth(authn).WithPlugins(buildPluginStore())
@@ -160,6 +163,20 @@ func buildPluginStore() store.PluginStore {
 	}
 	log.Printf("plugin store: memory (set FEISHU_BITABLE_APP_TOKEN + FEISHU_PLUGINS_TABLE_ID to persist ownership)")
 	return store.NewMemoryPluginStore()
+}
+
+// buildAuditStore enables the persisted audit ledger (a dedicated Bitable table)
+// when FEISHU_BITABLE_APP_TOKEN + FEISHU_AUDIT_TABLE_ID are set; otherwise audit is
+// stdout-only. Reuses the platform's Feishu app creds (same dogfooding as the stores).
+func buildAuditStore() store.AuditSink {
+	appToken := os.Getenv("FEISHU_BITABLE_APP_TOKEN")
+	tableID := os.Getenv("FEISHU_AUDIT_TABLE_ID")
+	if appToken != "" && tableID != "" && !placeholder(appToken) && !placeholder(tableID) {
+		log.Printf("audit ledger: bitable (persistent; table %s)", tableID)
+		return store.NewBitableAuditStore(os.Getenv("FEISHU_APP_ID"), os.Getenv("FEISHU_APP_SECRET"), appToken, tableID)
+	}
+	log.Printf("audit ledger: stdout only (set FEISHU_AUDIT_TABLE_ID to persist the audit trail)")
+	return nil
 }
 
 // seed inserts one sample definition (dogfooding the sales_dashboard template) so

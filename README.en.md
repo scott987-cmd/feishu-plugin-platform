@@ -248,7 +248,7 @@ The generated source is meant to survive a hostile read by a compliance team.
 ```
 .
 ├── cmd/
-│   ├── api/             BFF / gateway: app CRUD, NL-generation proxy, /api/execute forward, auth
+│   ├── api/             BFF / gateway: app CRUD, NL-generation proxy, /api/execute forward, auth, audit ledger
 │   ├── generator/       NL → DSL service (holds the LLM key); /shortcut/* and /action/* endpoints
 │   ├── execute-runner/  self-hosted execute runtime for the container/connector track (auditable; no external function hosting)
 │   ├── shortcutgen/     CLI: -nl (NL) / -action (automation) / -out (scaffold)

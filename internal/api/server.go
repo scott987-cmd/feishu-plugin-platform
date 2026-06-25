@@ -17,6 +17,7 @@ import (
 	"net"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -56,6 +57,7 @@ type Server struct {
 	limiter *rateLimiter
 	authn   *auth.Authenticator // nil = login disabled (platform stays anonymous)
 	plugins store.PluginStore   // per-user owned plugins (nil = ownership disabled)
+	audit   store.AuditSink     // persisted audit ledger (nil = stdout-only)
 
 	readyMu   sync.Mutex
 	readyAt   time.Time
@@ -82,6 +84,10 @@ func (s *Server) WithAuth(a *auth.Authenticator) *Server { s.authn = a; return s
 // WithPlugins attaches the per-user plugin store (enables "my plugins"). Chainable.
 func (s *Server) WithPlugins(p store.PluginStore) *Server { s.plugins = p; return s }
 
+// WithAudit attaches a persisted audit ledger (enables GET /api/audit and durable
+// audit records). Independent of login: admin-token publishes are audited too. Chainable.
+func (s *Server) WithAudit(a store.AuditSink) *Server { s.audit = a; return s }
+
 // Routes wires handlers and the middleware chain.
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
@@ -105,6 +111,7 @@ func (s *Server) Routes() http.Handler {
 		s.proxyGenerator(w, r, "/action/zip")
 	})
 	mux.HandleFunc("POST /api/execute", s.handleExecute) // forward to self-hosted execute-runner (call-chain B)
+	mux.HandleFunc("GET /api/audit", s.handleAudit)      // admin-only: persisted audit trail
 	// Identity (Feishu OAuth) + per-user plugin ownership. Registered only when
 	// login is configured; all are no-ops/anonymous otherwise.
 	if s.authn != nil {
@@ -195,6 +202,44 @@ func (s *Server) actor(r *http.Request) string {
 	return "admin-token"
 }
 
+// recordAudit emits an audit event for a mutating action. It ALWAYS logs to stdout
+// (works even with no audit table configured) and, when a persisted sink is wired,
+// also appends a durable record. Persistence is best-effort: an append failure is
+// logged but does not fail the user's request (the event still lives in the stdout
+// log). Synchronous on purpose — publishes/deletes are rare admin ops, not a hot path.
+func (s *Server) recordAudit(r *http.Request, action, target string, version int) {
+	actor, ip := s.actor(r), clientIP(r)
+	log.Printf("AUDIT actor=%s action=%s id=%s version=%d ip=%s", actor, action, target, version, ip)
+	if s.audit == nil {
+		return
+	}
+	e := store.AuditEvent{Time: time.Now().UTC(), Actor: actor, Action: action, Target: target, Version: version, IP: ip}
+	if err := s.audit.Append(r.Context(), e); err != nil {
+		log.Printf("audit append failed (event is still in the stdout log): %v", err)
+	}
+}
+
+// handleAudit serves the persisted audit trail (newest-first), admin-token only.
+func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
+	if s.audit == nil {
+		writeErr(w, http.StatusServiceUnavailable, "audit ledger not configured (set FEISHU_AUDIT_TABLE_ID)")
+		return
+	}
+	limit := 200
+	if q := r.URL.Query().Get("limit"); q != "" {
+		if n, err := strconv.Atoi(q); err == nil && n > 0 && n <= 1000 {
+			limit = n
+		}
+	}
+	events, err := s.audit.List(r.Context(), limit)
+	if err != nil {
+		log.Printf("audit list: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	writeJSON(w, http.StatusOK, events)
+}
+
 // clientIP returns the best-effort caller IP (honors a single X-Forwarded-For hop
 // from the TLS-terminating proxy).
 func clientIP(r *http.Request) string {
@@ -226,7 +271,7 @@ func (s *Server) handlePut(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	log.Printf("AUDIT actor=%s action=put.app id=%s ip=%s", s.actor(r), stored.ID, clientIP(r))
+	s.recordAudit(r, "put.app", stored.ID, stored.Version)
 	writeJSON(w, http.StatusOK, stored)
 }
 
@@ -237,7 +282,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	log.Printf("AUDIT actor=%s action=delete.app id=%s ip=%s", s.actor(r), id, clientIP(r))
+	s.recordAudit(r, "delete.app", id, 0)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -376,13 +421,15 @@ func (s *Server) withCORS(next http.Handler) http.Handler {
 //   - "user":  /api/me + /api/my/* — the handler enforces the session cookie.
 //   - "read":  GET /api/apps* and POST /api/execute — render + compute. Accepts the
 //     read-only token, the admin token, or a logged-in session.
-//   - "admin": POST/DELETE /api/apps — mutating the curated container catalog.
-//     Admin token only (the CLI publishes; browsers never do).
+//   - "admin": POST/DELETE /api/apps (mutating the curated container catalog) and
+//     GET /api/audit (the org-wide audit trail). Admin token only — never a browser.
 //   - "generate": the LLM-backed endpoints — admin token or a logged-in session.
 func apiCapability(method, path string) string {
 	switch {
 	case path == "/api/me" || strings.HasPrefix(path, "/api/my/"):
 		return "user"
+	case path == "/api/audit":
+		return "admin" // the org-wide audit trail is admin-token only
 	case path == "/api/execute":
 		return "read"
 	case strings.HasPrefix(path, "/api/apps"):

@@ -38,6 +38,10 @@ data:
   # Secret below (a ConfigMap is readable by anyone with namespace get on
   # configmaps). Only the non-sensitive table id stays in config.
   FEISHU_BITABLE_TABLE_ID: "REPLACE_ME"
+  # Optional: persisted audit ledger. Set to the audit_log table id (printed by
+  # bitable-bootstrap) to enable GET /api/audit + durable audit records; leave empty
+  # for stdout-only audit. See docs/PRODUCTION.md.
+  FEISHU_AUDIT_TABLE_ID: ""
   # Lock CORS to your Feishu origin in production (not "*").
   ALLOWED_ORIGIN: "https://REPLACE.feishu.cn"
   # Cap /api/generate per minute to protect the LLM budget.

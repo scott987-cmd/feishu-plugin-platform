@@ -150,3 +150,15 @@ opdev upload ./dist
 **加固(防误改)** —— 把数据 Base 的人工编辑权限收紧(仅管理员 / 只读共享),避免有人在表里手改定义导致渲染异常;定义的唯一可信写入口是平台 API。
 
 > 边界:Base 副本/记录导出的具体入口与配额以你的飞书控制台为准;首次请在目标环境验证一次"副本 → 切换 → 恢复"全流程,确认 RPO/RTO 满足要求。
+
+## 11. 审计账本(持久化)
+
+平台对目录的每次**写 / 删**都产一条审计事件(谁 `actor` / 何时 `time` / 动作 `action` / 目标 `target` / 版本 `version` / 来源 IP)。事件**始终**进 stdout 日志;**另配一张 Bitable 表即持久化**,重启不丢、可被合规人查询。
+
+- **启用** —— 设 `FEISHU_AUDIT_TABLE_ID`(指向 `audit_log` 表;`bitable-bootstrap` 会一并创建并打印该表 id)。留空 = 仅 stdout。
+- **表结构** —— `time / actor / action / target / version / ip / detail`(`version` 为数字,其余文本)。
+- **追加式** —— 平台只 `create` 不 update/delete,应用层即防篡改(配合「§10 防误改」把数据 Base 人工写权限收紧)。
+- **查询** —— `GET /api/audit?limit=N`(newest-first,默认 200、上限 1000),**仅 admin token**(只读 token、登录会话均 401)——组织级审计轨只给运维/合规持有的 admin token。管理员也可直接在 Base UI 原生筛选。
+- **写入失败不阻断请求** —— 审计 append 失败只告警(事件仍在 stdout),不让一次发布因审计表故障而失败。
+
+> 这条同时闭合了 ROADMAP「必补缺口:发布审计流水账」。后续增量:出网账本(execute-runtime 逐次出网)、bundle↔源码哈希(attestation)——见 ROADMAP「企业增强路线」#2。

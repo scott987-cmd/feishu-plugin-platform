@@ -150,3 +150,15 @@ The platform's system-of-record (app / plugin definitions + ownership) lives in 
 **Hardening (prevent mis-edits)** — restrict human edit access to the data Base (admins only / read-only sharing) so nobody hand-edits a definition into a broken state; the only trusted write path for definitions is the platform API.
 
 > Boundary: the exact entry points and quotas for Base copies / record export depend on your Feishu console; before relying on it, run the full "copy → switch → restore" drill once in the target environment and confirm RPO/RTO meet your requirements.
+
+## 11. Audit ledger (persisted)
+
+Every catalog **write / delete** emits an audit event (who `actor` / when `time` / `action` / `target` / `version` / source `ip`). Events **always** go to the stdout log; **add one Bitable table and they're persisted** — surviving restarts and queryable by a compliance owner.
+
+- **Enable** — set `FEISHU_AUDIT_TABLE_ID` (points at the `audit_log` table; `bitable-bootstrap` creates it and prints the id). Empty = stdout-only.
+- **Schema** — `time / actor / action / target / version / ip / detail` (`version` is a number, the rest text).
+- **Append-only** — the platform only `create`s, never updates/deletes, so the trail is tamper-evident at the app layer (pair with "§10 hardening" to lock human write access to the data Base).
+- **Query** — `GET /api/audit?limit=N` (newest-first, default 200, max 1000), **admin token only** (the read-only token and a login session both get 401) — the org-wide trail is only for the ops/compliance holder of the admin token. Admins can also filter it natively in the Base UI.
+- **A failed append never fails the request** — an audit append error only warns (the event is still in stdout); a publish never fails because the audit table hiccuped.
+
+> This also closes the ROADMAP gap "Publish audit ledger." Follow-on increments: the egress ledger (per-call execute-runtime egress) and bundle↔source hashing (attestation) — see ROADMAP "Enterprise enhancements" #2.
