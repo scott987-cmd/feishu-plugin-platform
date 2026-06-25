@@ -23,13 +23,60 @@ import (
 type Engine struct {
 	client       *http.Client
 	maxBodyBytes int64
+	recorder     EgressRecorder
+}
+
+// EgressEvent is one outbound call the runtime made (or refused) on a plugin's
+// behalf — the per-call egress evidence for the audit ledger ("which plugin sent
+// to which external host, allowed or blocked").
+type EgressEvent struct {
+	PluginID string // the plugin the egress is attributed to
+	Step     string // step id in a multi-step pipeline; "" for a single request
+	Host     string // the external host contacted
+	Method   string // HTTP method
+	Outcome  string // "allowed" (the request went out) | "error" (refused/failed before/at send)
+	Detail   string // e.g. "status=200" or the error (SSRF/redirect block, network)
+}
+
+// EgressRecorder receives one event per outbound attempt. The runtime calls it
+// INLINE on the request path, so an implementation MUST NOT block (buffer / fire
+// async); it must be safe for concurrent use.
+type EgressRecorder interface {
+	RecordEgress(ctx context.Context, e EgressEvent)
 }
 
 // Options configure the runtime's safety envelope.
 type Options struct {
-	Timeout      time.Duration // per outbound request (default 10s)
-	MaxBodyBytes int64         // cap on a single response body (default 1MiB)
-	AllowPrivate bool          // allow outbound to private/loopback IPs (default false; SSRF guard)
+	Timeout      time.Duration  // per outbound request (default 10s)
+	MaxBodyBytes int64          // cap on a single response body (default 1MiB)
+	AllowPrivate bool           // allow outbound to private/loopback IPs (default false; SSRF guard)
+	Recorder     EgressRecorder // optional egress ledger sink (nil = no recording)
+}
+
+// pluginIDCtxKey carries the plugin id into fetch so egress events are attributed.
+type pluginIDCtxKey struct{}
+
+// WithPluginID tags ctx so egress events emitted during Run are attributed to this
+// plugin id. The runner sets it from the request; when unset, Run falls back to the
+// shortcut's own id.
+func WithPluginID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, pluginIDCtxKey{}, id)
+}
+
+func pluginIDFrom(ctx context.Context) string {
+	id, _ := ctx.Value(pluginIDCtxKey{}).(string)
+	return id
+}
+
+// recordEgress reports one outbound attempt to the configured recorder (no-op when
+// none is set). Best-effort and non-fatal: it never affects the plugin's result.
+func (e *Engine) recordEgress(ctx context.Context, step, host, method, outcome, detail string) {
+	if e.recorder == nil {
+		return
+	}
+	e.recorder.RecordEgress(ctx, EgressEvent{
+		PluginID: pluginIDFrom(ctx), Step: step, Host: host, Method: method, Outcome: outcome, Detail: detail,
+	})
 }
 
 // New builds an Engine. Outbound requests get a per-request timeout and, unless
@@ -108,6 +155,7 @@ func New(o Options) *Engine {
 			},
 		},
 		maxBodyBytes: o.MaxBodyBytes,
+		recorder:     o.Recorder,
 	}
 }
 
@@ -127,6 +175,11 @@ func (e *Engine) Run(ctx context.Context, fs shortcut.FieldShortcut, inputs map[
 	}
 	if inputs == nil {
 		inputs = map[string]any{}
+	}
+	// Attribute egress to the shortcut's own id unless the caller (the runner) set a
+	// platform plugin id on the context.
+	if pluginIDFrom(ctx) == "" {
+		ctx = WithPluginID(ctx, fs.ID)
 	}
 
 	var res any
@@ -170,7 +223,7 @@ func (e *Engine) runSteps(ctx context.Context, fs shortcut.FieldShortcut, inputs
 		if ctype != "" {
 			headers["Content-Type"] = ctype
 		}
-		resp, err := e.fetch(ctx, fs.Domains, s.Method, u, headers, body)
+		resp, err := e.fetch(ctx, fs.Domains, s.Method, u, headers, body, s.ID)
 		if err != nil {
 			return nil, fmt.Errorf("step %q (%d): %w", s.ID, i, err)
 		}
@@ -208,7 +261,7 @@ func (e *Engine) runSingle(ctx context.Context, fs shortcut.FieldShortcut, input
 	if ctype != "" {
 		headers["Content-Type"] = ctype
 	}
-	return e.fetch(ctx, fs.Domains, fs.Execute.Method, u, headers, body)
+	return e.fetch(ctx, fs.Domains, fs.Execute.Method, u, headers, body, "")
 }
 
 // applyAuth injects the user-supplied credential per the SDK auth type. Returns
@@ -237,7 +290,7 @@ func applyAuth(a *shortcut.Auth, cred, u string, headers map[string]string) (str
 // http/https are allowed; the response is size-capped and must be JSON. domains
 // is the per-plugin host allowlist, carried in the request context so redirect
 // hops (CheckRedirect) are re-validated against it.
-func (e *Engine) fetch(ctx context.Context, domains []string, method, u string, headers map[string]string, body []byte) (any, error) {
+func (e *Engine) fetch(ctx context.Context, domains []string, method, u string, headers map[string]string, body []byte, step string) (any, error) {
 	parsed, err := url.Parse(u)
 	if err != nil {
 		return nil, fmt.Errorf("bad url: %w", err)
@@ -245,6 +298,7 @@ func (e *Engine) fetch(ctx context.Context, domains []string, method, u string, 
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
 		return nil, fmt.Errorf("scheme %q not allowed", parsed.Scheme)
 	}
+	host := parsed.Hostname()
 	ctx = context.WithValue(ctx, domainsCtxKey{}, domains)
 	var rdr io.Reader
 	if body != nil {
@@ -259,9 +313,15 @@ func (e *Engine) fetch(ctx context.Context, domains []string, method, u string, 
 	}
 	resp, err := e.client.Do(req)
 	if err != nil {
+		// A transport error here covers the security-relevant refusals too: an SSRF
+		// dial-block and a redirect-allowlist block both surface as Do errors, so they
+		// land in the egress ledger as "error" with the reason.
+		e.recordEgress(ctx, step, host, method, "error", truncate(err.Error(), 200))
 		return nil, err
 	}
 	defer resp.Body.Close()
+	// The request left the runtime (data egressed) regardless of the status code.
+	e.recordEgress(ctx, step, host, method, "allowed", fmt.Sprintf("status=%d", resp.StatusCode))
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, e.maxBodyBytes))
 	if err != nil {
 		return nil, err

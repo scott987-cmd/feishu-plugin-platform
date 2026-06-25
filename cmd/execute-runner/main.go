@@ -11,28 +11,38 @@
 package main
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/dushibing/feishu-plugin-platform/internal/execrt"
 	"github.com/dushibing/feishu-plugin-platform/internal/httpx"
 	"github.com/dushibing/feishu-plugin-platform/internal/shortcut"
+	"github.com/dushibing/feishu-plugin-platform/internal/store"
 )
 
 func main() {
 	port := getenv("PORT", "8095")
 	token := os.Getenv("PLATFORM_API_TOKEN") // optional bearer; required when set
 
+	// Egress ledger: every outbound call is logged to stdout, and (when an audit
+	// table is configured) appended to the same Bitable audit ledger as the catalog
+	// audit — the per-call DLP evidence ("which plugin sent to which host").
+	rec := newEgressRecorder(buildAuditSink())
+
 	eng := execrt.New(execrt.Options{
 		Timeout:      durEnv("EXECUTE_TIMEOUT_SECONDS", 10*time.Second),
 		MaxBodyBytes: int64(intEnv("EXECUTE_MAX_BODY_BYTES", 1<<20)),
 		AllowPrivate: boolEnv("EXECUTE_ALLOW_PRIVATE", false), // SSRF guard; only loosen for local dev
+		Recorder:     rec,
 	})
 	maxConc := intEnv("EXECUTE_MAX_CONCURRENCY", 64)
 	if maxConc < 1 {
@@ -110,13 +120,94 @@ func (h *handler) execute(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "internal error"})
 		}
 	}()
-	data, err := h.eng.Run(r.Context(), req.DSL, req.Inputs, req.Auth)
+	// Attribute egress to the platform plugin id when the caller supplied one
+	// (otherwise the Engine falls back to the shortcut's own id).
+	ctx := r.Context()
+	if req.PluginID != "" {
+		ctx = execrt.WithPluginID(ctx, req.PluginID)
+	}
+	data, err := h.eng.Run(ctx, req.DSL, req.Inputs, req.Auth)
 	if err != nil {
 		// 422: the DSL/inputs/upstream produced a handled failure (not a bug).
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "data": data})
+}
+
+// egressRecorder turns execrt egress events into audit records. It is ASYNC by
+// design: execute is a hot path (one call per render, potentially per row), so a
+// synchronous Bitable write per outbound hop would wreck latency and hammer the
+// Feishu per-app QPS. RecordEgress only logs to stdout (cheap) + pushes onto a
+// bounded buffer; a single background worker drains it to the ledger serially. The
+// buffer drops (with a logged count) under extreme load — the audit is shed, never
+// the execute, and the stdout log still has every event.
+type egressRecorder struct {
+	sink    store.AuditSink // nil = stdout-only
+	ch      chan store.AuditEvent
+	dropped atomic.Int64
+}
+
+func newEgressRecorder(sink store.AuditSink) *egressRecorder {
+	r := &egressRecorder{sink: sink, ch: make(chan store.AuditEvent, 1024)}
+	if sink != nil {
+		go r.worker()
+	}
+	return r
+}
+
+func (r *egressRecorder) RecordEgress(_ context.Context, ev execrt.EgressEvent) {
+	id, step := orElse(ev.PluginID, "unknown"), orElse(ev.Step, "-")
+	log.Printf("EGRESS plugin=%s host=%s method=%s outcome=%s step=%s detail=%q", id, ev.Host, ev.Method, ev.Outcome, step, ev.Detail)
+	if r.sink == nil {
+		return
+	}
+	ae := store.AuditEvent{
+		Time:   time.Now().UTC(),
+		Actor:  "plugin:" + id,
+		Action: "execute.egress",
+		Target: ev.Host,
+		Detail: fmt.Sprintf("method=%s outcome=%s step=%s %s", ev.Method, ev.Outcome, step, ev.Detail),
+	}
+	select {
+	case r.ch <- ae:
+	default:
+		r.dropped.Add(1) // buffer full: shed the audit write, keep the execute fast
+	}
+}
+
+func (r *egressRecorder) worker() {
+	for ae := range r.ch {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := r.sink.Append(ctx, ae); err != nil {
+			log.Printf("egress audit append failed (event is still in the stdout log): %v", err)
+		}
+		cancel()
+		if d := r.dropped.Swap(0); d > 0 {
+			log.Printf("egress audit: dropped %d events (buffer full under load; they remain in the stdout log)", d)
+		}
+	}
+}
+
+// buildAuditSink wires the egress ledger to the same Bitable audit table as the api
+// service when FEISHU_BITABLE_APP_TOKEN + FEISHU_AUDIT_TABLE_ID are set; otherwise
+// egress is stdout-only.
+func buildAuditSink() store.AuditSink {
+	appToken := os.Getenv("FEISHU_BITABLE_APP_TOKEN")
+	tableID := os.Getenv("FEISHU_AUDIT_TABLE_ID")
+	if appToken == "" || tableID == "" {
+		log.Printf("egress ledger: stdout only (set FEISHU_BITABLE_APP_TOKEN + FEISHU_AUDIT_TABLE_ID to persist egress to the audit table)")
+		return nil
+	}
+	log.Printf("egress ledger: bitable (persistent; audit table %s)", tableID)
+	return store.NewBitableAuditStore(os.Getenv("FEISHU_APP_ID"), os.Getenv("FEISHU_APP_SECRET"), appToken, tableID)
+}
+
+func orElse(s, fallback string) string {
+	if s == "" {
+		return fallback
+	}
+	return s
 }
 
 func bearerOK(r *http.Request, want string) bool {

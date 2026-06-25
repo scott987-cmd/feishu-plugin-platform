@@ -49,6 +49,16 @@ spec:
               value: "10"
             - name: EXECUTE_MAX_BODY_BYTES
               value: "1048576"
+            # Optional egress ledger: when these are set, the runner appends a per-call
+            # egress record to the SAME audit table as the api. Omit for stdout-only egress.
+            - name: FEISHU_APP_ID
+              valueFrom: { secretKeyRef: { name: platform-secrets, key: FEISHU_APP_ID, optional: true } }
+            - name: FEISHU_APP_SECRET
+              valueFrom: { secretKeyRef: { name: platform-secrets, key: FEISHU_APP_SECRET, optional: true } }
+            - name: FEISHU_BITABLE_APP_TOKEN
+              valueFrom: { secretKeyRef: { name: platform-secrets, key: FEISHU_BITABLE_APP_TOKEN, optional: true } }
+            - name: FEISHU_AUDIT_TABLE_ID
+              valueFrom: { configMapKeyRef: { name: platform-config, key: FEISHU_AUDIT_TABLE_ID, optional: true } }
             # If your cluster routes egress through an allowlist proxy, set
             # HTTP_PROXY/HTTPS_PROXY here; the SSRF guard allows dialing the proxy
             # while still blocking other private targets.
