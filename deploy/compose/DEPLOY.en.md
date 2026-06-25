@@ -49,6 +49,14 @@ docker compose -f docker-compose.prod.yml logs -f      # watch Caddy certificate
 
 Startup guard: if `PLATFORM_API_TOKEN` contains `REPLACE_ME`, or `STORE=bitable` is set but FEISHU_* is missing → it exits immediately (it will not "fail configuration yet keep running bare").
 
+> **Upgrading an existing deploy**: after the security hardening, `GENERATOR_TOKEN` / `EXECUTE_RUNNER_TOKEN` / `PLATFORM_READ_TOKEN` became **required** (compose enforces them with `${VAR:?}`). If your `.env` predates them, `docker compose up` reports `required variable … is missing a value` (an interpolation error, not a startup failure) at the first missing one. Fill only the missing ones (existing values untouched):
+> ```bash
+> for kv in GENERATOR_TOKEN EXECUTE_RUNNER_TOKEN PLATFORM_READ_TOKEN; do
+>   grep -q "^$kv=" .env || echo "$kv=$(openssl rand -hex 32)" >> .env
+> done
+> ```
+> Note: `PLATFORM_READ_TOKEN` must differ from `PLATFORM_API_TOKEN` (it ships in the client bundle); after adding it, rebuild + release the widget with this read-only token for it to take effect.
+
 ## 3. Verify the backend
 
 ```bash

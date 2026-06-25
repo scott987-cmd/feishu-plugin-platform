@@ -160,6 +160,6 @@ opdev upload ./dist
 - **追加式** —— 平台只 `create` 不 update/delete,应用层即防篡改(配合「§10 防误改」把数据 Base 人工写权限收紧)。
 - **查询** —— `GET /api/audit?limit=N`(newest-first,默认 200、上限 1000),**仅 admin token**(只读 token、登录会话均 401)——组织级审计轨只给运维/合规持有的 admin token。管理员也可直接在 Base UI 原生筛选。
 - **写入失败不阻断请求** —— 审计 append 失败只告警(事件仍在 stdout),不让一次发布因审计表故障而失败。
-- **出网账本(`execute.egress`)** —— execute-runner 对**每次外呼**(多步逐跳)产一条 `action=execute.egress` 事件(`actor=plugin:<id>`、`target=<外部域名>`、detail 含 method/outcome/step):谁把数据发给了哪个外部域名、放行还是拦截(SSRF / 重定向拦截记为 `error`),落**同一张审计表**。**热路径友好**:execute 是高频路径,所以记录走 stdout(始终)+ **异步缓冲单 worker** 写 Bitable(缓冲满则丢弃并记丢弃数,**绝不拖慢 execute、不打爆飞书 QPS**)。runner 需配 `FEISHU_APP_ID/SECRET/BITABLE_APP_TOKEN` + `FEISHU_AUDIT_TABLE_ID` 才持久化,否则仅 stdout。
+- **出网账本(`execute.egress`)** —— execute-runner 对**每次外呼**(多步逐跳)产一条 `action=execute.egress` 事件(`actor=plugin:<id>`、`target=<外部域名>`、detail 含 method/outcome/step):谁把数据发给了哪个外部域名、放行还是拦截(SSRF / 重定向拦截记为 `error`),落**同一张审计表**。归属用平台 pluginId(api 经 `/api/execute` 透传;缺省回退捷径自身 id)。**热路径友好**:execute 是高频路径,所以记录走 stdout(始终)+ **异步缓冲单 worker** 写 Bitable(缓冲满则丢弃并记丢弃数,**绝不拖慢 execute、不打爆飞书 QPS**)。**进程关闭时优雅 flush**:收到 SIGTERM 后,HTTP 优雅排空 → worker 把缓冲里剩余事件全部写完再退出(10s 上限),所以滚动重启/重部署**不丢已缓冲的出网记录**;stdout 始终是兜底。runner 需配 `FEISHU_APP_ID/SECRET/BITABLE_APP_TOKEN` + `FEISHU_AUDIT_TABLE_ID` 才持久化,否则仅 stdout。
 
 > 这条 + 出网账本一起闭合了 ROADMAP「必补缺口:发布审计流水账」与「企业增强路线 #1/#2」。剩余增量:bundle↔受审源码哈希(attestation)。

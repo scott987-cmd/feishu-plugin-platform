@@ -49,6 +49,14 @@ docker compose -f docker-compose.prod.yml logs -f      # 看 Caddy 签证 + api/
 
 启动期守卫:`PLATFORM_API_TOKEN` 含 `REPLACE_ME`、或 `STORE=bitable` 缺 FEISHU_* → 直接退出(不会"配置失败还裸跑")。
 
+> **升级既有部署**:安全加固后 `GENERATOR_TOKEN` / `EXECUTE_RUNNER_TOKEN` / `PLATFORM_READ_TOKEN` 成了**必填**(compose 用 `${VAR:?}` 强校验)。如果你的 `.env` 是更早一次部署留下的、没有这几个,`docker compose up` 会在第一个缺失项上报 `required variable … is missing a value` 而非启动失败。补法(只补缺、不动已有值):
+> ```bash
+> for kv in GENERATOR_TOKEN EXECUTE_RUNNER_TOKEN PLATFORM_READ_TOKEN; do
+>   grep -q "^$kv=" .env || echo "$kv=$(openssl rand -hex 32)" >> .env
+> done
+> ```
+> 注:`PLATFORM_READ_TOKEN` 须与 `PLATFORM_API_TOKEN` 不同(它进客户端 bundle);补好后 widget 要用这个只读 token 重新构建发版才生效。
+
 ## 3. 验证后端
 
 ```bash
