@@ -65,4 +65,22 @@ func TestEgressRecorderStdoutOnly(t *testing.T) {
 	r.RecordEgress(context.Background(), execrt.EgressEvent{PluginID: "x", Host: "h", Method: "GET", Outcome: "allowed"})
 	// The unknown/empty fields fall back to placeholders; this must not block or panic.
 	r.RecordEgress(context.Background(), execrt.EgressEvent{Host: "h2", Method: "POST", Outcome: "error"})
+	r.Drain(time.Second) // nil-sink Drain must return immediately
+}
+
+// TestEgressRecorderDrainFlushes proves graceful drain: every buffered event is
+// persisted before Drain returns (a pod restart must not silently drop records).
+func TestEgressRecorderDrainFlushes(t *testing.T) {
+	fs := &fakeSink{}
+	r := newEgressRecorder(fs)
+	const n = 50
+	for i := 0; i < n; i++ {
+		r.RecordEgress(context.Background(), execrt.EgressEvent{PluginID: "p", Host: "h", Method: "GET", Outcome: "allowed"})
+	}
+	r.Drain(5 * time.Second)
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	if len(fs.got) != n {
+		t.Errorf("after Drain got %d events, want all %d flushed (graceful drain)", len(fs.got), n)
+	}
 }

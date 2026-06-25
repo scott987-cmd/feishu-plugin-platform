@@ -79,6 +79,29 @@ func TestExecuteForwardsInlineDSL(t *testing.T) {
 	}
 }
 
+func TestExecuteForwardsPluginID(t *testing.T) {
+	var gotBody map[string]any
+	runner := fakeRunner(t, nil, &gotBody)
+	defer runner.Close()
+	ts := newTestServer(Config{ExecuteRunnerURL: runner.URL})
+	defer ts.Close()
+
+	// Inline DSL + a platform plugin id: the id must be forwarded so the runner can
+	// attribute egress-ledger events to it (not just the shortcut's own id).
+	body := `{"pluginId":"pl_platform_9","dsl":{"id":"city-weather","title":{"zh_CN":"天气"}},"inputs":{}}`
+	resp, err := http.Post(ts.URL+"/api/execute", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if gotBody["pluginId"] != "pl_platform_9" {
+		t.Errorf("runner saw pluginId %v, want pl_platform_9", gotBody["pluginId"])
+	}
+}
+
 func TestExecuteRequiresDSLOrPluginID(t *testing.T) {
 	runner := fakeRunner(t, nil, nil)
 	defer runner.Close()

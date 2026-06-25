@@ -68,7 +68,9 @@ func (s *Server) handleExecute(w http.ResponseWriter, r *http.Request) {
 		dslRaw = rec.DSL
 	}
 
-	payload, err := json.Marshal(map[string]any{"dsl": dslRaw, "inputs": in.Inputs, "auth": in.Auth})
+	// Forward the plugin id so the runner attributes egress-ledger events to the
+	// platform plugin (it falls back to the shortcut's own id when this is empty).
+	payload, err := json.Marshal(map[string]any{"pluginId": in.PluginID, "dsl": dslRaw, "inputs": in.Inputs, "auth": in.Auth})
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal error")
 		return

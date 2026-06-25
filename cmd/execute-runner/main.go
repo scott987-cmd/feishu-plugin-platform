@@ -64,8 +64,12 @@ func main() {
 	}
 	srv := httpx.NewServer(":"+port, mux)
 	log.Printf("execute-runner listening on :%s (auth=%t, ssrfGuard=%t, maxConcurrency=%d)", port, token != "", !boolEnv("EXECUTE_ALLOW_PRIVATE", false), maxConc)
-	if err := httpx.Run(srv); err != nil {
-		log.Fatal(err)
+	runErr := httpx.Run(srv) // blocks until SIGINT/SIGTERM, then drains in-flight HTTP
+	// HTTP is fully drained now (no more /execute → no more egress events): flush the
+	// buffered egress ledger before exit so a restart doesn't drop persisted records.
+	rec.Drain(10 * time.Second)
+	if runErr != nil {
+		log.Fatal(runErr)
 	}
 }
 
@@ -145,13 +149,17 @@ func (h *handler) execute(w http.ResponseWriter, r *http.Request) {
 type egressRecorder struct {
 	sink    store.AuditSink // nil = stdout-only
 	ch      chan store.AuditEvent
+	stop    chan struct{} // closed by Drain to flush + stop the worker
+	done    chan struct{} // closed by the worker once it has drained and exited
 	dropped atomic.Int64
 }
 
 func newEgressRecorder(sink store.AuditSink) *egressRecorder {
-	r := &egressRecorder{sink: sink, ch: make(chan store.AuditEvent, 1024)}
+	r := &egressRecorder{sink: sink, ch: make(chan store.AuditEvent, 1024), stop: make(chan struct{}), done: make(chan struct{})}
 	if sink != nil {
 		go r.worker()
+	} else {
+		close(r.done) // no worker → already "drained"
 	}
 	return r
 }
@@ -169,6 +177,8 @@ func (r *egressRecorder) RecordEgress(_ context.Context, ev execrt.EgressEvent) 
 		Target: ev.Host,
 		Detail: fmt.Sprintf("method=%s outcome=%s step=%s %s", ev.Method, ev.Outcome, step, ev.Detail),
 	}
+	// Never blocks the execute path; the channel is never closed, so a send can never
+	// panic even if it races Drain (the event just stays buffered / drops).
 	select {
 	case r.ch <- ae:
 	default:
@@ -176,16 +186,48 @@ func (r *egressRecorder) RecordEgress(_ context.Context, ev execrt.EgressEvent) 
 	}
 }
 
+func (r *egressRecorder) append(ae store.AuditEvent) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := r.sink.Append(ctx, ae); err != nil {
+		log.Printf("egress audit append failed (event is still in the stdout log): %v", err)
+	}
+	if d := r.dropped.Swap(0); d > 0 {
+		log.Printf("egress audit: dropped %d events (buffer full under load; they remain in the stdout log)", d)
+	}
+}
+
 func (r *egressRecorder) worker() {
-	for ae := range r.ch {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		if err := r.sink.Append(ctx, ae); err != nil {
-			log.Printf("egress audit append failed (event is still in the stdout log): %v", err)
+	defer close(r.done)
+	for {
+		select {
+		case ae := <-r.ch:
+			r.append(ae)
+		case <-r.stop:
+			for { // flush whatever is buffered, then exit
+				select {
+				case ae := <-r.ch:
+					r.append(ae)
+				default:
+					return
+				}
+			}
 		}
-		cancel()
-		if d := r.dropped.Swap(0); d > 0 {
-			log.Printf("egress audit: dropped %d events (buffer full under load; they remain in the stdout log)", d)
-		}
+	}
+}
+
+// Drain flushes the buffered egress events and stops the worker, bounded by timeout.
+// Call it AFTER the HTTP server has shut down (httpx.Run returned), so no new events
+// arrive concurrently — otherwise a pod restart would silently lose buffered records.
+func (r *egressRecorder) Drain(timeout time.Duration) {
+	if r.sink == nil {
+		return
+	}
+	close(r.stop)
+	select {
+	case <-r.done:
+	case <-time.After(timeout):
+		log.Printf("egress audit: drain timed out after %s; remaining buffered events are only in the stdout log", timeout)
 	}
 }
 
